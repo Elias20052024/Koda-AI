@@ -1,21 +1,12 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
-// Lazily created so a missing var during HMR doesn't crash the whole app.
-let _client: SupabaseClient | null = null;
+// Named `supabase` so any cached import of `{ supabase }` still resolves.
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-export function getSupabaseClient(): SupabaseClient {
-  if (_client) return _client;
-  if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error(
-      'Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.'
-    );
-  }
-  _client = createClient(supabaseUrl, supabaseAnonKey);
-  return _client;
-}
+// Convenience helper kept for compatibility with newer imports.
+export const getSupabaseClient = () => supabase;
 
-/** True when Supabase env vars are present — use to conditionally show social buttons. */
 export const supabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
