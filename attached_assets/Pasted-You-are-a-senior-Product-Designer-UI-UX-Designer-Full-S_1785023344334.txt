@@ -1,0 +1,344 @@
+You are a senior Product Designer, UI/UX Designer, Full-Stack React Developer, and Software Architect.
+
+Build a complete Minimum Viable Product (MVP) called **Koda AI**.
+
+The goal is to create a modern, production-quality AI-powered internship matching platform for IT students, companies, and university partners.
+
+The MVP should focus on validating the business idea with the minimum number of features while maintaining a premium SaaS experience.
+
+=========================================================
+PROJECT OVERVIEW
+=========================================================
+
+Koda AI helps IT students discover internship opportunities based on their technical skills instead of relying only on resumes.
+
+Companies can post internships and discover suitable candidates using AI-powered matching.
+
+Universities can verify students and monitor internship placements.
+
+This is Phase 1.
+
+Do NOT include:
+
+• Freelancing
+• Full-time jobs
+• Part-time jobs
+• Courses
+• Certifications
+• Marketplace
+• Mentoring
+• Chat
+• Social networking
+• Payments
+
+=========================================================
+OBJECTIVE
+=========================================================
+
+Build an MVP that looks like a real startup ready for launch.
+
+Focus on:
+
+• Clean UX
+• Modern UI
+• Fast performance
+• Responsive design
+• Scalable architecture
+
+Do not add unnecessary features.
+
+=========================================================
+DESIGN STYLE
+=========================================================
+
+Design inspiration:
+
+• Linear
+• Vercel
+• Stripe
+• Supabase
+• Ashby
+• Notion
+
+The interface should be:
+
+• Premium
+• Minimal
+• Professional
+• Modern
+• Clean
+• Responsive
+
+=========================================================
+BRANDING
+=========================================================
+
+Use my existing Koda AI logo.
+
+Do not redesign it.
+
+Primary Color
+
+#0B132B
+
+Gradient
+
+#33D6D1
+#35B7FF
+#7A4DFF
+
+Background
+
+#FFFFFF
+
+Cards
+
+#F8FAFC
+
+Use these colors consistently throughout the application.
+
+=========================================================
+TECH STACK
+=========================================================
+
+Frontend
+
+• React 19
+• TypeScript
+• Vite
+• React Router
+• Tailwind CSS
+• shadcn/ui
+• Lucide React
+• Framer Motion
+
+Backend
+
+• Node.js
+• Express.js
+
+Database
+
+• PostgreSQL (Neon)
+
+ORM
+
+• Prisma
+
+Authentication
+
+• Supabase Auth
+
+Deployment
+
+• Vercel (Frontend)
+• Railway or Render (Backend)
+
+=========================================================
+USER ROLES
+=========================================================
+
+Student
+
+Company
+
+University
+
+Admin
+
+=========================================================
+MVP FEATURES
+=========================================================
+
+Landing Page
+
+Authentication
+
+Student Dashboard
+
+Company Dashboard
+
+University Dashboard
+
+Profile Management
+
+Internship Posting
+
+Internship Search
+
+Internship Details
+
+Apply for Internship
+
+Application Tracking
+
+Student Verification
+
+Basic AI Matching Score
+
+Notifications
+
+Settings
+
+About
+
+Contact
+
+Privacy Policy
+
+Terms of Service
+
+=========================================================
+LANDING PAGE
+=========================================================
+
+Include:
+
+• Hero section
+• Features
+• How It Works
+• Benefits
+• Testimonials
+• FAQ
+• Call to Action
+• Footer
+
+=========================================================
+STUDENT FEATURES
+=========================================================
+
+Students can:
+
+• Register/Login
+• Complete profile
+• Upload resume
+• Add skills
+• Add projects
+• View recommended internships
+• Apply for internships
+• Track application status
+
+=========================================================
+COMPANY FEATURES
+=========================================================
+
+Companies can:
+
+• Register/Login
+• Create company profile
+• Post internship
+• Edit internship
+• View applicants
+• Accept or reject applications
+
+=========================================================
+UNIVERSITY FEATURES
+=========================================================
+
+Universities can:
+
+• Verify students
+• View verified students
+• Track internship placements
+
+=========================================================
+AI MATCHING
+=========================================================
+
+Implement a simple AI matching system.
+
+Compare:
+
+Student Skills
+
+vs
+
+Internship Required Skills
+
+Display:
+
+• Matching Percentage
+• Matching Explanation
+
+This does not need a complex AI model in the MVP.
+
+=========================================================
+DATABASE
+=========================================================
+
+Design a clean relational PostgreSQL database using Prisma.
+
+Include tables for:
+
+Users
+
+Students
+
+Companies
+
+Universities
+
+Internships
+
+Applications
+
+Skills
+
+Notifications
+
+Verification Requests
+
+=========================================================
+ANIMATIONS
+=========================================================
+
+Use Framer Motion.
+
+Implement:
+
+• Hero fade-in
+• Scroll reveal
+• Smooth page transitions
+• Hover animations
+• Card lift effects
+• Animated counters
+• Animated progress bars
+• Smooth dashboard loading
+• Toast notifications
+• Loading skeletons
+
+Animations should be subtle and professional.
+
+=========================================================
+RESPONSIVE DESIGN
+=========================================================
+
+Fully responsive for:
+
+Desktop
+
+Tablet
+
+Mobile
+
+=========================================================
+CODE QUALITY
+=========================================================
+
+Use:
+
+• Clean Architecture
+• Reusable Components
+• TypeScript Best Practices
+• Modular Folder Structure
+• Production-ready Code
+
+=========================================================
+FINAL GOAL
+=========================================================
+
+Build a polished MVP that is visually impressive, easy to use, and ready to demonstrate to investors, universities, companies, and as a Final Year Project.
+
+The MVP should focus on solving one problem exceptionally well:
+
+Helping IT students find internships and helping companies find qualified IT interns through AI-powered matching.
