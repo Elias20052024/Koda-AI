@@ -20,6 +20,7 @@ import ContactPage from '@/pages/contact';
 import PrivacyPage from '@/pages/privacy';
 import TermsPage from '@/pages/terms';
 import NotFound from '@/pages/not-found';
+import OAuthCallbackPage from '@/pages/oauth-callback';
 
 // Pages - Dashboard
 import DashboardRouter from '@/pages/dashboard-router';
@@ -91,6 +92,7 @@ function Router() {
       <Route path="/privacy">
         <PublicLayout><PrivacyPage /></PublicLayout>
       </Route>
+      <Route path="/oauth-callback"><OAuthCallbackPage /></Route>
       <Route path="/terms">
         <PublicLayout><TermsPage /></PublicLayout>
       </Route>
