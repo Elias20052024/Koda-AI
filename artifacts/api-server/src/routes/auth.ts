@@ -84,6 +84,32 @@ router.post("/auth/login", async (req, res) => {
   return res.json({ token, user: userToResponse(user) });
 });
 
+// POST /api/auth/social  — find-or-create a user arriving from Supabase OAuth
+router.post("/auth/social", async (req, res) => {
+  const { email, name, avatarUrl } = req.body;
+  if (!email) return res.status(400).json({ error: "email is required" });
+
+  let [user] = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
+
+  if (!user) {
+    const safeName = name ?? email.split("@")[0];
+    [user] = await db
+      .insert(usersTable)
+      .values({ email, name: safeName, role: "student", passwordHash: "", avatarUrl: avatarUrl ?? null })
+      .returning();
+
+    // Bootstrap a student profile for new social sign-ups
+    await db.insert(studentsTable).values({ userId: user.id }).onConflictDoNothing();
+  } else if (avatarUrl && !user.avatarUrl) {
+    // Back-fill avatar if we now have one
+    await db.update(usersTable).set({ avatarUrl }).where(eq(usersTable.id, user.id));
+    user = { ...user, avatarUrl };
+  }
+
+  const token = makeToken(user.id);
+  return res.json({ token, user: userToResponse(user) });
+});
+
 // GET /api/auth/me  — reads userId from x-user-id header (set by client after login)
 router.get("/auth/me", async (req, res) => {
   const userId = parseInt(req.headers["x-user-id"] as string);

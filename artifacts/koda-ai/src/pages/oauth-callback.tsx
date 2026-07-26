@@ -1,13 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
 import { useAuth } from '@/hooks/use-auth';
+import { getSupabaseClient } from '@/lib/supabase';
 import { Loader2, Code2, AlertCircle } from 'lucide-react';
 import { Link } from 'wouter';
 
+const API_BASE = import.meta.env.BASE_URL?.replace(/\/$/, '') + '/api';
+
 /**
- * Landing page for OAuth redirects.
- * The backend redirects here with ?payload=<JSON> after a successful OAuth flow.
- * On error the backend redirects to /login?error=<message> instead.
+ * Supabase redirects here after the user completes OAuth with a provider.
+ * The auth tokens are in the URL fragment (#access_token=...).
+ * We:
+ *   1. Let Supabase parse the fragment and establish a session
+ *   2. Pull the user's email/name/avatar from the session
+ *   3. POST to our backend to find-or-create the user in our DB
+ *   4. Store our app token in localStorage and redirect to dashboard
  */
 export default function OAuthCallbackPage() {
   const { setAuth } = useAuth();
@@ -15,29 +22,56 @@ export default function OAuthCallbackPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
+    let cancelled = false;
 
-    // Handle error case — backend redirected /login?error=... but user ended up here
-    const err = params.get('error');
-    if (err) {
-      setError(decodeURIComponent(err));
-      return;
+    async function handleCallback() {
+      // Supabase auto-parses the hash fragment on page load
+      const { data: { session }, error: sessionError } = await getSupabaseClient().auth.getSession();
+
+      if (cancelled) return;
+
+      if (sessionError || !session) {
+        setError(sessionError?.message ?? 'No session found. Please try logging in again.');
+        return;
+      }
+
+      const { user } = session;
+      const email = user.email ?? '';
+      const name =
+        user.user_metadata?.full_name ??
+        user.user_metadata?.name ??
+        user.user_metadata?.user_name ??
+        email.split('@')[0];
+      const avatarUrl =
+        user.user_metadata?.avatar_url ??
+        user.user_metadata?.picture ??
+        null;
+
+      try {
+        // Tell our backend about this social user — it will find-or-create them
+        const res = await fetch(`${API_BASE}/auth/social`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, name, avatarUrl }),
+        });
+
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body?.error ?? `Server error ${res.status}`);
+        }
+
+        const { token, user: appUser } = await res.json();
+        if (cancelled) return;
+
+        setAuth({ token, user: appUser });
+        setLocation('/dashboard');
+      } catch (err: any) {
+        if (!cancelled) setError(err?.message ?? 'Failed to complete sign-in.');
+      }
     }
 
-    const raw = params.get('payload');
-    if (!raw) {
-      setError('No authentication data received.');
-      return;
-    }
-
-    try {
-      const { token, user } = JSON.parse(decodeURIComponent(raw));
-      if (!token || !user) throw new Error('Malformed payload');
-      setAuth({ token, user });
-      setLocation('/dashboard');
-    } catch {
-      setError('Failed to process login. Please try again.');
-    }
+    handleCallback();
+    return () => { cancelled = true; };
   }, [setAuth, setLocation]);
 
   return (
@@ -53,12 +87,9 @@ export default function OAuthCallbackPage() {
         {error ? (
           <div className="space-y-3">
             <AlertCircle className="h-10 w-10 text-destructive mx-auto" />
-            <p className="text-base font-medium text-foreground">Login failed</p>
+            <p className="text-base font-medium text-foreground">Sign-in failed</p>
             <p className="text-sm text-muted-foreground">{error}</p>
-            <Link
-              href="/login"
-              className="inline-block mt-2 text-sm font-medium text-primary hover:text-primary/80"
-            >
+            <Link href="/login" className="inline-block mt-2 text-sm font-medium text-primary hover:text-primary/80">
               ← Back to login
             </Link>
           </div>
@@ -66,7 +97,7 @@ export default function OAuthCallbackPage() {
           <div className="space-y-3">
             <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto" />
             <p className="text-base font-medium text-foreground">Signing you in…</p>
-            <p className="text-sm text-muted-foreground">Just a moment while we set up your account.</p>
+            <p className="text-sm text-muted-foreground">Setting up your account, just a moment.</p>
           </div>
         )}
       </div>
