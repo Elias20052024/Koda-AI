@@ -1,0 +1,1960 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: Koda AI API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: auth
+    description: Authentication operations
+  - name: students
+    description: Student profile operations
+  - name: companies
+    description: Company profile operations
+  - name: universities
+    description: University operations
+  - name: internships
+    description: Internship operations
+  - name: applications
+    description: Application operations
+  - name: notifications
+    description: Notification operations
+  - name: verification
+    description: Student verification
+  - name: dashboard
+    description: Dashboard statistics
+  - name: talent
+    description: Assessment and internship matching
+
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  # Auth
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterInput"
+      responses:
+        "201":
+          description: Registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  # Students
+  /students/{id}:
+    get:
+      operationId: getStudent
+      tags: [students]
+      summary: Get student profile
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Student profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentProfile"
+    put:
+      operationId: updateStudent
+      tags: [students]
+      summary: Update student profile
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StudentInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentProfile"
+
+  /students/{id}/applications:
+    get:
+      operationId: getStudentApplications
+      tags: [students]
+      summary: Get student's applications
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Applications list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Application"
+
+  /students/{id}/recommended:
+    get:
+      operationId: getRecommendedInternships
+      tags: [students]
+      summary: Get AI-recommended internships for student
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Recommended internships with match score
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InternshipWithMatch"
+
+  /talent/recommendations:
+    get:
+      operationId: getTalentRecommendations
+      tags: [talent]
+      summary: Get authenticated student's transparent internship matches
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Ranked open internships and evidence-based match breakdowns
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InternshipWithMatch"
+
+  /talent/recommendations/refresh:
+    post:
+      operationId: refreshTalentRecommendations
+      tags: [talent]
+      summary: Recalculate and persist the authenticated student's match snapshot
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Calculated recommendations with saved match snapshots
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InternshipWithMatch"
+
+  /talent/recommendations/{internshipId}/explanation:
+    post:
+      operationId: explainTalentRecommendation
+      tags: [talent]
+      summary: Generate an AI explanation without changing a deterministic match score
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: internshipId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: AI-generated explanation grounded in the server-calculated score
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  explanation:
+                    type: string
+                  model:
+                    type: string
+
+  /talent/profile:
+    get:
+      operationId: getTalentProfile
+      tags: [talent]
+      summary: Get the authenticated student's matching evidence
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Student skills, education, projects, and experience
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentTalentProfile"
+    put:
+      operationId: updateTalentSkills
+      tags: [talent]
+      summary: Update the authenticated student's skills
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StudentSkillsInput"
+      responses:
+        "200":
+          description: Updated skills
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentSkillsInput"
+
+  /talent/profile/evidence:
+    put:
+      operationId: replaceTalentEvidence
+      tags: [talent]
+      summary: Replace the authenticated student's structured evidence
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StudentEvidenceInput"
+      responses:
+        "200":
+          description: Evidence saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  saved:
+                    type: boolean
+
+  /talent/skills:
+    get:
+      operationId: getTalentTaxonomy
+      tags: [talent]
+      summary: List the supported IT roles and skills
+      responses:
+        "200":
+          description: Role and skill taxonomy
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /talent/company/internships/{internshipId}/requirements:
+    put:
+      operationId: updateInternshipTalentRequirements
+      tags: [talent]
+      summary: Set role and education requirements for a company-owned internship
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: internshipId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InternshipTalentRequirementsInput"
+      responses:
+        "200":
+          description: Requirements updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InternshipTalentRequirementsInput"
+
+  /talent/privacy/university-consents:
+    post:
+      operationId: grantUniversityAnalyticsConsent
+      tags: [talent]
+      summary: Grant a university access to minimum-cohort aggregate analytics
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [universityId]
+              properties:
+                universityId:
+                  type: integer
+      responses:
+        "200":
+          description: Consent granted
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /talent/privacy/university-consents/{universityId}:
+    delete:
+      operationId: revokeUniversityAnalyticsConsent
+      tags: [talent]
+      summary: Revoke university aggregate analytics consent
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: universityId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Consent revoked
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /talent/privacy/company-consents:
+    post:
+      operationId: grantCompanyAssessmentConsent
+      tags: [talent]
+      summary: Share assessment results with the company for an application
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [applicationId]
+              properties:
+                applicationId:
+                  type: integer
+      responses:
+        "200":
+          description: Consent granted
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /talent/privacy/company-consents/{applicationId}:
+    delete:
+      operationId: revokeCompanyAssessmentConsent
+      tags: [talent]
+      summary: Revoke company assessment sharing consent
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: applicationId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Consent revoked
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /talent/university/analytics:
+    get:
+      operationId: getUniversityTalentAnalytics
+      tags: [talent]
+      summary: Get consented, verified-student aggregate analytics
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Aggregate analytics, suppressed below the minimum cohort size
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /talent/assessments:
+    get:
+      operationId: listAvailableAssessments
+      tags: [talent]
+      summary: List reviewed and published assessments
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Assessments currently available to students
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AssessmentSummary"
+
+  /talent/admin/assessment-drafts:
+    post:
+      operationId: createAssessmentDraft
+      tags: [talent]
+      summary: Generate an unpublished assessment draft for administrator review
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssessmentDraftInput"
+      responses:
+        "200":
+          description: Draft assessment created; no content is published automatically
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /talent/admin/assessment-versions/{versionId}:
+    get:
+      operationId: getAssessmentDraftForReview
+      tags: [talent]
+      summary: Get assessment content and answer keys for an administrator to review
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: versionId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Private review content including answer keys
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /talent/admin/assessment-questions/{questionId}:
+    put:
+      operationId: editAssessmentDraftQuestion
+      tags: [talent]
+      summary: Edit an unreviewed assessment question
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: questionId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuestionDraftContent"
+      responses:
+        "200":
+          description: Question updated
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /talent/admin/assessment-questions/{questionId}/review:
+    post:
+      operationId: reviewAssessmentQuestion
+      tags: [talent]
+      summary: Mark a question as human-reviewed
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: questionId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Question reviewed
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /talent/admin/assessment-versions/{versionId}/publish:
+    post:
+      operationId: publishReviewedAssessment
+      tags: [talent]
+      summary: Publish an assessment only after every question is reviewed
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: versionId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Reviewed assessment published
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /talent/assessment-history:
+    get:
+      operationId: getAssessmentHistory
+      tags: [talent]
+      summary: Get the authenticated student's assessment history and skill scores
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Assessment history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AssessmentHistoryItem"
+
+  /talent/assessments/{versionId}/attempts:
+    post:
+      operationId: startAssessmentAttempt
+      tags: [talent]
+      summary: Start a timed assessment
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: versionId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Started assessment attempt; answer keys are never returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssessmentAttempt"
+
+  /talent/attempts/{attemptId}:
+    get:
+      operationId: getAssessmentAttempt
+      tags: [talent]
+      summary: Get the authenticated student's assessment attempt
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: attemptId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Attempt and public question data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssessmentAttempt"
+
+  /talent/attempts/{attemptId}/answers/{questionId}:
+    put:
+      operationId: saveAssessmentAnswer
+      tags: [talent]
+      summary: Save one validated assessment answer
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: attemptId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: questionId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [answer]
+              properties:
+                answer: {}
+      responses:
+        "200":
+          description: Answer saved
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /talent/attempts/{attemptId}/submit:
+    post:
+      operationId: submitAssessmentAttempt
+      tags: [talent]
+      summary: Submit and deterministically score an assessment
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: attemptId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Submitted attempt and score results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssessmentAttempt"
+
+  # Companies
+  /companies/{id}:
+    get:
+      operationId: getCompany
+      tags: [companies]
+      summary: Get company profile
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Company profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanyProfile"
+    put:
+      operationId: updateCompany
+      tags: [companies]
+      summary: Update company profile
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompanyInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanyProfile"
+
+  /companies/{id}/internships:
+    get:
+      operationId: getCompanyInternships
+      tags: [companies]
+      summary: Get company's internships
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Internships list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Internship"
+
+  # Universities
+  /universities/{id}:
+    get:
+      operationId: getUniversity
+      tags: [universities]
+      summary: Get university profile
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: University profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UniversityProfile"
+
+  /universities/{id}/students:
+    get:
+      operationId: getUniversityStudents
+      tags: [universities]
+      summary: Get university's verified students
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Students list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StudentProfile"
+
+  # Internships
+  /internships:
+    get:
+      operationId: listInternships
+      tags: [internships]
+      summary: List internships with optional filters
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: location
+          in: query
+          schema:
+            type: string
+        - name: type
+          in: query
+          schema:
+            type: string
+        - name: skill
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Internships list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Internship"
+    post:
+      operationId: createInternship
+      tags: [internships]
+      summary: Create internship posting
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InternshipInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Internship"
+
+  /internships/{id}:
+    get:
+      operationId: getInternship
+      tags: [internships]
+      summary: Get internship details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Internship details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InternshipDetail"
+    put:
+      operationId: updateInternship
+      tags: [internships]
+      summary: Update internship
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InternshipInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Internship"
+    delete:
+      operationId: deleteInternship
+      tags: [internships]
+      summary: Delete internship
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /internships/{id}/applicants:
+    get:
+      operationId: getInternshipApplicants
+      tags: [internships]
+      summary: Get applicants for an internship
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Applicants
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApplicationWithStudent"
+
+  /internships/{id}/match:
+    get:
+      operationId: getMatchScore
+      tags: [internships]
+      summary: Get deterministic match score for the authenticated student
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: studentId
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Match result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MatchResult"
+
+  # Applications
+  /applications:
+    post:
+      operationId: createApplication
+      tags: [applications]
+      summary: Apply for an internship
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApplicationInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Application"
+
+  /students/{id}/applications:
+    get:
+      operationId: getStudentApplications
+      tags: [applications]
+      summary: Get applications for the authenticated student
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Student applications
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Application"
+
+  /applications/{id}/status:
+    put:
+      operationId: updateApplicationStatus
+      tags: [applications]
+      summary: Update application status (accept/reject)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApplicationStatusInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Application"
+
+  # Notifications
+  /notifications:
+    get:
+      operationId: listNotifications
+      tags: [notifications]
+      summary: Get notifications for current user
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Notifications
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Notification"
+
+  /notifications/{id}/read:
+    put:
+      operationId: markNotificationRead
+      tags: [notifications]
+      summary: Mark notification as read
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Notification"
+
+  # Verification
+  /verification:
+    get:
+      operationId: listVerificationRequests
+      tags: [verification]
+      summary: Get verification requests (for university)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: universityId
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Verification requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VerificationRequest"
+    post:
+      operationId: createVerificationRequest
+      tags: [verification]
+      summary: Request verification (student)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerificationInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerificationRequest"
+
+  /verification/{id}/status:
+    put:
+      operationId: updateVerificationStatus
+      tags: [verification]
+      summary: Approve or reject verification (university)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerificationStatusInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerificationRequest"
+
+  # Dashboards
+  /dashboard/student:
+    get:
+      operationId: getStudentDashboard
+      tags: [dashboard]
+      summary: Get student dashboard stats
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: studentId
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Student stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentDashboard"
+
+  /dashboard/company:
+    get:
+      operationId: getCompanyDashboard
+      tags: [dashboard]
+      summary: Get company dashboard stats
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: companyId
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Company stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanyDashboard"
+
+  /dashboard/university:
+    get:
+      operationId: getUniversityDashboard
+      tags: [dashboard]
+      summary: Get university dashboard stats
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: universityId
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: University stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UniversityDashboard"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    # Auth
+    RegisterInput:
+      type: object
+      required: [email, password, name, role]
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+          enum: [student, company, university]
+
+    LoginInput:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+
+    AuthResponse:
+      type: object
+      required: [token, user]
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+
+    User:
+      type: object
+      required: [id, email, name, role, createdAt]
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+          enum: [student, company, university, admin]
+        avatarUrl:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    # Student
+    StudentProfile:
+      type: object
+      required: [id, userId, name, email]
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        university:
+          type: ["string", "null"]
+        gpa:
+          type: ["number", "null"]
+        bio:
+          type: ["string", "null"]
+        resumeUrl:
+          type: ["string", "null"]
+        skills:
+          type: array
+          items:
+            type: string
+        verified:
+          type: boolean
+        avatarUrl:
+          type: ["string", "null"]
+
+    StudentInput:
+      type: object
+      properties:
+        university:
+          type: string
+        gpa:
+          type: number
+        bio:
+          type: string
+        resumeUrl:
+          type: string
+        skills:
+          type: array
+          items:
+            type: string
+        avatarUrl:
+          type: string
+
+    # Company
+    CompanyProfile:
+      type: object
+      required: [id, userId, name, email]
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        companyName:
+          type: ["string", "null"]
+        industry:
+          type: ["string", "null"]
+        description:
+          type: ["string", "null"]
+        website:
+          type: ["string", "null"]
+        logoUrl:
+          type: ["string", "null"]
+        verified:
+          type: boolean
+
+    CompanyInput:
+      type: object
+      properties:
+        companyName:
+          type: string
+        industry:
+          type: string
+        description:
+          type: string
+        website:
+          type: string
+        logoUrl:
+          type: string
+
+    # University
+    UniversityProfile:
+      type: object
+      required: [id, userId, name, email]
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        universityName:
+          type: ["string", "null"]
+        country:
+          type: ["string", "null"]
+        website:
+          type: ["string", "null"]
+
+    # Internship
+    Internship:
+      type: object
+      required: [id, companyId, title, description, status, createdAt]
+      properties:
+        id:
+          type: integer
+        companyId:
+          type: integer
+        companyName:
+          type: string
+        companyLogo:
+          type: ["string", "null"]
+        title:
+          type: string
+        description:
+          type: string
+        location:
+          type: ["string", "null"]
+        type:
+          type: ["string", "null"]
+        duration:
+          type: ["string", "null"]
+        skills:
+          type: array
+          items:
+            type: string
+        salary:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [open, closed, draft]
+        deadline:
+          type: ["string", "null"]
+        applicantsCount:
+          type: integer
+        createdAt:
+          type: string
+
+    InternshipDetail:
+      type: object
+      required: [id, companyId, title, description, status, createdAt]
+      properties:
+        id:
+          type: integer
+        companyId:
+          type: integer
+        companyName:
+          type: string
+        companyLogo:
+          type: ["string", "null"]
+        companyWebsite:
+          type: ["string", "null"]
+        companyIndustry:
+          type: ["string", "null"]
+        title:
+          type: string
+        description:
+          type: string
+        location:
+          type: ["string", "null"]
+        type:
+          type: ["string", "null"]
+        duration:
+          type: ["string", "null"]
+        skills:
+          type: array
+          items:
+            type: string
+        salary:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [open, closed, draft]
+        deadline:
+          type: ["string", "null"]
+        applicantsCount:
+          type: integer
+        createdAt:
+          type: string
+
+    InternshipInput:
+      type: object
+      required: [title, description]
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        location:
+          type: string
+        type:
+          type: string
+        duration:
+          type: string
+        skills:
+          type: array
+          items:
+            type: string
+        salary:
+          type: string
+        status:
+          type: string
+          enum: [open, closed, draft]
+        deadline:
+          type: string
+
+    InternshipWithMatch:
+      type: object
+      required: [id, companyId, title, description, status, createdAt, matchScore]
+      properties:
+        id:
+          type: integer
+        companyId:
+          type: integer
+        companyName:
+          type: string
+        companyLogo:
+          type: ["string", "null"]
+        title:
+          type: string
+        description:
+          type: string
+        location:
+          type: ["string", "null"]
+        type:
+          type: ["string", "null"]
+        duration:
+          type: ["string", "null"]
+        skills:
+          type: array
+          items:
+            type: string
+        salary:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [open, closed, draft]
+        deadline:
+          type: ["string", "null"]
+        applicantsCount:
+          type: integer
+        createdAt:
+          type: string
+        matchScore:
+          type: ["number", "null"]
+        matchExplanation:
+          type: string
+        evidenceCoverage:
+          type: number
+        weights:
+          type: object
+          properties:
+            assessment:
+              type: number
+            skills:
+              type: number
+            projectsExperience:
+              type: number
+            education:
+              type: number
+        breakdown:
+          type: object
+
+    MatchResult:
+      type: object
+      required: [matchScore, matchExplanation, matchedSkills, missingSkills]
+      properties:
+        matchScore:
+          type: ["number", "null"]
+        matchExplanation:
+          type: string
+        matchedSkills:
+          type: array
+          items:
+            type: string
+        missingSkills:
+          type: array
+          items:
+            type: string
+
+    # Application
+    Application:
+      type: object
+      required: [id, studentId, internshipId, status, createdAt]
+      properties:
+        id:
+          type: integer
+        studentId:
+          type: integer
+        internshipId:
+          type: integer
+        internshipTitle:
+          type: string
+        companyName:
+          type: string
+        companyLogo:
+          type: ["string", "null"]
+        coverLetter:
+          type: ["string", "null"]
+        matchScore:
+          type: ["integer", "null"]
+        status:
+          type: string
+          enum: [pending, accepted, rejected, withdrawn]
+        createdAt:
+          type: string
+
+    ApplicationWithStudent:
+      type: object
+      required: [id, studentId, internshipId, status, createdAt]
+      properties:
+        id:
+          type: integer
+        studentId:
+          type: integer
+        internshipId:
+          type: integer
+        studentName:
+          type: string
+        studentEmail:
+          type: string
+        studentAvatar:
+          type: ["string", "null"]
+        studentSkills:
+          type: array
+          items:
+            type: string
+        studentUniversity:
+          type: ["string", "null"]
+        coverLetter:
+          type: ["string", "null"]
+        matchScore:
+          type: ["integer", "null"]
+        status:
+          type: string
+          enum: [pending, accepted, rejected, withdrawn]
+        createdAt:
+          type: string
+        assessmentScores:
+          type: array
+          items:
+            type: object
+            required: [skill, score]
+            properties:
+              skill:
+                type: string
+              score:
+                type: number
+
+    ApplicationInput:
+      type: object
+      required: [studentId, internshipId]
+      properties:
+        studentId:
+          type: integer
+        internshipId:
+          type: integer
+        coverLetter:
+          type: string
+
+    ApplicationStatusInput:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [accepted, rejected]
+
+    # Notification
+    Notification:
+      type: object
+      required: [id, userId, title, message, read, createdAt]
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        title:
+          type: string
+        message:
+          type: string
+        read:
+          type: boolean
+        type:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    # Verification
+    VerificationRequest:
+      type: object
+      required: [id, studentId, universityId, status, createdAt]
+      properties:
+        id:
+          type: integer
+        studentId:
+          type: integer
+        universityId:
+          type: integer
+        studentName:
+          type: string
+        studentEmail:
+          type: string
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+        createdAt:
+          type: string
+
+    VerificationInput:
+      type: object
+      required: [studentId, universityId]
+      properties:
+        studentId:
+          type: integer
+        universityId:
+          type: integer
+
+    VerificationStatusInput:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [approved, rejected]
+
+    StudentSkillsInput:
+      type: object
+      required: [skills]
+      properties:
+        skills:
+          type: array
+          maxItems: 100
+          items:
+            type: string
+
+    StudentEvidenceInput:
+      type: object
+      required: [projects, experience, education]
+      properties:
+        projects:
+          type: array
+          items:
+            type: object
+        experience:
+          type: array
+          items:
+            type: object
+        education:
+          type: array
+          items:
+            type: object
+
+    StudentTalentProfile:
+      type: object
+      required: [skills, projects, experience, education]
+      properties:
+        skills:
+          type: array
+          items:
+            type: string
+        projects:
+          type: array
+          items:
+            type: object
+        experience:
+          type: array
+          items:
+            type: object
+        education:
+          type: array
+          items:
+            type: object
+
+    InternshipTalentRequirementsInput:
+      type: object
+      properties:
+        roleId:
+          type: ["integer", "null"]
+        requiredCoursework:
+          type: array
+          items:
+            type: string
+        requiredFieldsOfStudy:
+          type: array
+          items:
+            type: string
+
+    AssessmentSummary:
+      type: object
+      required: [id, templateId, version, title, skill, difficulty, durationMinutes, questionCount]
+      properties:
+        id:
+          type: integer
+        templateId:
+          type: integer
+        version:
+          type: integer
+        title:
+          type: string
+        skill:
+          type: string
+        difficulty:
+          type: string
+          enum: [beginner, intermediate, advanced]
+        durationMinutes:
+          type: integer
+        questionCount:
+          type: integer
+
+    AssessmentDraftInput:
+      type: object
+      required: [skillId, difficulty, questionCount]
+      properties:
+        skillId:
+          type: integer
+        difficulty:
+          type: string
+          enum: [beginner, intermediate, advanced]
+        questionCount:
+          type: integer
+          minimum: 1
+          maximum: 15
+
+    QuestionDraftContent:
+      type: object
+      required: [prompt, options, answerKey, explanation]
+      properties:
+        prompt:
+          type: string
+        options:
+          type: array
+          minItems: 3
+          maxItems: 5
+          items:
+            type: object
+            required: [id, label]
+            properties:
+              id:
+                type: string
+              label:
+                type: string
+        answerKey:
+          type: string
+        explanation:
+          type: string
+
+    AssessmentHistoryItem:
+      type: object
+      required: [id, title, status, startedAt, skillScores]
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        status:
+          type: string
+          enum: [in_progress, submitted, expired]
+        startedAt:
+          type: string
+        submittedAt:
+          type: ["string", "null"]
+        overallScore:
+          type: ["number", "null"]
+        skillScores:
+          type: array
+          items:
+            type: object
+            properties:
+              skill:
+                type: string
+              score:
+                type: number
+
+    AssessmentAttempt:
+      type: object
+      required: [id, status, startedAt, expiresAt, questions]
+      properties:
+        id:
+          type: integer
+        status:
+          type: string
+          enum: [in_progress, submitted, expired]
+        startedAt:
+          type: string
+        expiresAt:
+          type: string
+        submittedAt:
+          type: ["string", "null"]
+        overallScore:
+          type: ["number", "null"]
+        resultExplanation:
+          type: ["string", "null"]
+        questions:
+          type: array
+          items:
+            type: object
+            required: [id, position, skillId, type, difficulty, prompt, options, answer]
+            properties:
+              id:
+                type: integer
+              position:
+                type: integer
+              skillId:
+                type: integer
+              type:
+                type: string
+              difficulty:
+                type: string
+              prompt:
+                type: string
+              options:
+                type: array
+                items:
+                  type: object
+              answer:
+                type: ["string", "array", "null"]
+              earnedPoints:
+                type: ["number", "null"]
+              explanation:
+                type: ["string", "null"]
+
+    # Dashboards
+    StudentDashboard:
+      type: object
+      required: [totalApplications, pendingApplications, acceptedApplications, rejectedApplications, profileCompleteness, recommendedCount]
+      properties:
+        totalApplications:
+          type: integer
+        pendingApplications:
+          type: integer
+        acceptedApplications:
+          type: integer
+        rejectedApplications:
+          type: integer
+        profileCompleteness:
+          type: integer
+        recommendedCount:
+          type: integer
+        recentApplications:
+          type: array
+          items:
+            $ref: "#/components/schemas/Application"
+
+    CompanyDashboard:
+      type: object
+      required: [totalInternships, activeInternships, totalApplicants, pendingApplicants]
+      properties:
+        totalInternships:
+          type: integer
+        activeInternships:
+          type: integer
+        totalApplicants:
+          type: integer
+        pendingApplicants:
+          type: integer
+        acceptedApplicants:
+          type: integer
+        recentApplications:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApplicationWithStudent"
+
+    UniversityDashboard:
+      type: object
+      required: [totalStudents, verifiedStudents, pendingVerifications, placedStudents]
+      properties:
+        totalStudents:
+          type: integer
+        verifiedStudents:
+          type: integer
+        pendingVerifications:
+          type: integer
+        placedStudents:
+          type: integer
+        recentVerifications:
+          type: array
+          items:
+            $ref: "#/components/schemas/VerificationRequest"
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer

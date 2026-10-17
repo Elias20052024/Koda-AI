@@ -1,0 +1,39 @@
+﻿src/components/social-login-buttons.tsx(1,8): error TS1259: Module '"C:/Users/USER/OneDrive/Desktop/Projects/Koda AI/node_modules/.pnpm/@types+react@19.2.17/node_modules/@types/react/index"' can only be default-imported using the 'esModuleInterop' flag
+src/components/social-login-buttons.tsx(2,24): error TS2307: Cannot find module '@/components/ui/button' or its corresponding type declarations.
+src/components/social-login-buttons.tsx(4,35): error TS2307: Cannot find module '@/lib/supabase' or its corresponding type declarations.
+src/components/social-login-buttons.tsx(5,26): error TS2307: Cannot find module '@/hooks/use-toast' or its corresponding type declarations.
+src/components/social-login-buttons.tsx(10,3): error TS17004: Cannot use JSX unless the '--jsx' flag is provided.
+src/components/social-login-buttons.tsx(11,5): error TS17004: Cannot use JSX unless the '--jsx' flag is provided.
+src/components/social-login-buttons.tsx(12,5): error TS17004: Cannot use JSX unless the '--jsx' flag is provided.
+src/components/social-login-buttons.tsx(13,5): error TS17004: Cannot use JSX unless the '--jsx' flag is provided.
+src/components/social-login-buttons.tsx(14,5): error TS17004: Cannot use JSX unless the '--jsx' flag is provided.
+src/components/social-login-buttons.tsx(19,3): error TS17004: Cannot use JSX unless the '--jsx' flag is provided.
+src/components/social-login-buttons.tsx(20,5): error TS17004: Cannot use JSX unless the '--jsx' flag is provided.
+src/components/social-login-buttons.tsx(25,3): error TS17004: Cannot use JSX unless the '--jsx' flag is provided.
+src/components/social-login-buttons.tsx(26,5): error TS17004: Cannot use JSX unless the '--jsx' flag is provided.
+src/components/social-login-buttons.tsx(51,25): error TS1343: The 'import.meta' meta-property is only allowed when the '--module' option is 'es2020', 'es2022', 'esnext', 'system', 'node16', 'node18', 'node20', or 'nodenext'.
+src/components/social-login-buttons.tsx(51,37): error TS2339: Property 'env' does not exist on type 'ImportMeta'.
+src/components/social-login-buttons.tsx(72,5): error TS17004: Cannot use JSX unless the '--jsx' flag is provided.
+src/components/social-login-buttons.tsx(74,9): error TS17004: Cannot use JSX unless the '--jsx' flag is provided.
+src/components/social-login-buttons.tsx(83,13): error TS17004: Cannot use JSX unless the '--jsx' flag is provided.
+src/components/social-login-buttons.tsx(85,13): error TS17004: Cannot use JSX unless the '--jsx' flag is provided.
+src/pages/oauth-callback.tsx(1,8): error TS1259: Module '"C:/Users/USER/OneDrive/Desktop/Projects/Koda AI/node_modules/.pnpm/@types+react@19.2.17/node_modules/@types/react/index"' can only be default-imported using the 'esModuleInterop' flag
+src/pages/oauth-callback.tsx(3,25): error TS2307: Cannot find module '@/hooks/use-auth' or its corresponding type declarations.
+src/pages/oauth-callback.tsx(4,35): error TS2307: Cannot find module '@/lib/supabase' or its corresponding type declarations.
+src/pages/oauth-callback.tsx(8,21): error TS1343: The 'import.meta' meta-property is only allowed when the '--module' option is 'es2020', 'es2022', 'esnext', 'system', 'node16', 'node18', 'node20', or 'nodenext'.
+src/pages/oauth-callback.tsx(8,33): error TS2339: Property 'env' does not exist on type 'ImportMeta'.
+src/pages/oauth-callback.tsx(78,5): error TS17004: Cannot use JSX unless the '--jsx' flag is provided.
+src/pages/oauth-callback.tsx(79,7): error TS17004: Cannot use JSX unless the '--jsx' flag is provided.
+src/pages/oauth-callback.tsx(80,9): error TS17004: Cannot use JSX unless the '--jsx' flag is provided.
+src/pages/oauth-callback.tsx(81,11): error TS17004: Cannot use JSX unless the '--jsx' flag is provided.
+src/pages/oauth-callback.tsx(82,13): error TS17004: Cannot use JSX unless the '--jsx' flag is provided.
+src/pages/oauth-callback.tsx(84,11): error TS17004: Cannot use JSX unless the '--jsx' flag is provided.
+src/pages/oauth-callback.tsx(88,11): error TS17004: Cannot use JSX unless the '--jsx' flag is provided.
+src/pages/oauth-callback.tsx(89,13): error TS17004: Cannot use JSX unless the '--jsx' flag is provided.
+src/pages/oauth-callback.tsx(90,13): error TS17004: Cannot use JSX unless the '--jsx' flag is provided.
+src/pages/oauth-callback.tsx(91,13): error TS17004: Cannot use JSX unless the '--jsx' flag is provided.
+src/pages/oauth-callback.tsx(92,13): error TS17004: Cannot use JSX unless the '--jsx' flag is provided.
+src/pages/oauth-callback.tsx(97,11): error TS17004: Cannot use JSX unless the '--jsx' flag is provided.
+src/pages/oauth-callback.tsx(98,13): error TS17004: Cannot use JSX unless the '--jsx' flag is provided.
+src/pages/oauth-callback.tsx(99,13): error TS17004: Cannot use JSX unless the '--jsx' flag is provided.
+src/pages/oauth-callback.tsx(100,13): error TS17004: Cannot use JSX unless the '--jsx' flag is provided.

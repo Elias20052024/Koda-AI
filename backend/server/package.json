@@ -1,0 +1,25 @@
+{
+  "name": "@workspace/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "test": "tsx --test src/auth.test.ts src/talent/assessment-scoring.test.ts src/talent/matching.test.ts src/talent/question-drafts.test.ts src/ai/assistant.test.ts src/ai/routes.test.ts",
+    "start": "node --experimental-specifier-resolution=node dist/index.js"
+  },
+  "dependencies": {
+    "@fastify/cors": "^8.0.0",
+    "@google/genai": "^2.30.0",
+    "@workspace/db": "workspace:*",
+    "dotenv": "^16.3.1",
+    "drizzle-orm": "catalog:",
+    "fastify": "^4.29.1",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "tsx": "^4.20.0"
+  }
+}

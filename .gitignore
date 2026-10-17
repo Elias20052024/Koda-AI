@@ -47,3 +47,8 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Koda AI local env
+frontend/.env.local
+/.env
+/backend/server/.env
