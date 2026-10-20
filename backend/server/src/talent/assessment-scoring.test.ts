@@ -4,6 +4,7 @@ import {
   calculateQuestionPoints,
   isReadyQuestion,
   validateAssessmentAnswer,
+  validateRubricGrade,
 } from "./assessment-scoring.js";
 
 const reviewedAt = new Date("2025-01-01T00:00:00.000Z");
@@ -55,4 +56,31 @@ test("unreviewed and unsupported free-text questions are not eligible for timed 
   };
   assert.equal(isReadyQuestion(question), false);
   assert.throws(() => calculateQuestionPoints(question, "anything"), /invalid assessment answer/);
+});
+
+test("subjective questions require a reviewed rubric and are graded only against rubric criteria", () => {
+  const question = {
+    type: "short_answer",
+    options: null,
+    answerKey: {},
+    rubric: [
+      { criterion: "Explains the tradeoff", maxPoints: 2 },
+      { criterion: "Gives a practical example", maxPoints: 3 },
+    ],
+    maxPoints: 5,
+    reviewedAt,
+    reviewedByUserId: 7,
+  };
+  assert.equal(isReadyQuestion(question), true);
+  assert.equal(validateAssessmentAnswer(question, "  A considered response.  "), "A considered response.");
+  assert.equal(validateAssessmentAnswer(question, " "), "");
+  assert.equal(validateRubricGrade(question, [
+    { criterion: "Explains the tradeoff", points: 1 },
+    { criterion: "Gives a practical example", points: 2 },
+  ]), 3);
+  assert.equal(validateRubricGrade(question, [
+    { criterion: "Explains the tradeoff", points: 3 },
+    { criterion: "Gives a practical example", points: 2 },
+  ]), null);
+  assert.throws(() => calculateQuestionPoints(question, "response"), /human reviewer/);
 });

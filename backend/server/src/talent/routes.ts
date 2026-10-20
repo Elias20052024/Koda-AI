@@ -27,18 +27,20 @@ import {
   usersTable,
 } from "@workspace/db/schema";
 import { getSessionUserId } from "../auth.js";
-import { AssistantError, generateAssistantReply } from "../ai/assistant.js";
 import {
   calculateQuestionPoints,
   isReadyQuestion,
   validateAssessmentAnswer,
+  validateRubricGrade,
 } from "./assessment-scoring.js";
-import { parseQuestionDrafts } from "./question-drafts.js";
+import { parseAssessmentQuestions } from "./assessment-questions.js";
 import {
   calculateInternshipEvidenceMatch,
   explainMatch,
   MATCH_WEIGHTS,
+  type MatchWeights,
 } from "./matching.js";
+import { hasValidCompanyAssessmentConsent } from "./privacy.js";
 
 type AssessmentQuestion = typeof assessmentQuestionsTable.$inferSelect;
 
@@ -53,6 +55,44 @@ function normalize(value: string) {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function parseMatchWeights(value: unknown): MatchWeights | null {
+  if (!isRecord(value)) return null;
+  const keys = ["assessment", "skills", "projectsExperience", "education"] as const;
+  if (Object.keys(value).some((key) => !keys.includes(key as typeof keys[number]))) return null;
+  const weights = {} as MatchWeights;
+  for (const key of keys) {
+    const weight = value[key];
+    if (typeof weight !== "number" || !Number.isFinite(weight) || weight < 0 || weight > 1) return null;
+    weights[key] = weight;
+  }
+  return Object.values(weights).some((weight) => weight > 0) ? weights : null;
+}
+
+function parseSkillWeights(value: unknown) {
+  if (!isRecord(value)) return null;
+  const weights: Record<string, number> = {};
+  for (const [skill, weight] of Object.entries(value)) {
+    const normalizedSkill = normalize(skill);
+    if (
+      !normalizedSkill ||
+      typeof weight !== "number" ||
+      !Number.isFinite(weight) ||
+      weight < 0 ||
+      weight > 100
+    ) {
+      return null;
+    }
+    weights[normalizedSkill] = weight;
+  }
+  return weights;
+}
+
+function parseEligibilityScore(value: unknown) {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 100) return undefined;
+  return value;
 }
 
 function readText(value: unknown, maximumLength: number, required = false) {
@@ -250,7 +290,6 @@ async function buildAttemptResponse(attempt: typeof assessmentAttemptsTable.$inf
     submittedAt: attempt.submittedAt,
     overallScore: attempt.overallScore,
     resultExplanation: attempt.resultExplanation,
-    explanationModel: attempt.explanationModel,
     questions: questions.map((question) => {
       const answer = answersByQuestion.get(question.id);
       return {
@@ -262,7 +301,9 @@ async function buildAttemptResponse(attempt: typeof assessmentAttemptsTable.$inf
         prompt: question.prompt,
         options: question.options,
         answer: answer?.answer ?? null,
-        earnedPoints: attempt.status === "submitted" ? answer?.pointsEarned ?? null : null,
+        earnedPoints: ["submitted", "pending_review"].includes(attempt.status)
+          ? answer?.pointsEarned ?? null
+          : null,
         explanation: attempt.status === "submitted" ? question.explanation : null,
       };
     }),
@@ -278,22 +319,38 @@ function isUniqueViolation(error: unknown) {
   );
 }
 
+function isForeignKeyViolation(error: unknown) {
+  return Boolean(
+    error &&
+    typeof error === "object" &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "23503",
+  );
+}
+
 export function registerTalentRoutes(app: FastifyInstance) {
-  app.post("/api/talent/admin/assessment-drafts", async (request, reply) => {
+  app.post("/api/talent/admin/assessments", async (request, reply) => {
     const admin = await getAdminUser(request, reply);
     if (!admin) return { error: "administrator access required" };
     const body = isRecord(request.body) ? request.body : {};
     const skillId = parseId(body.skillId);
-    const questionCount = parseId(body.questionCount);
+    const roleId = body.roleId === null || body.roleId === undefined || body.roleId === ""
+      ? null
+      : parseId(body.roleId);
     const difficulty = body.difficulty;
+    const title = readText(body.title ?? "", 200);
     if (
       !skillId ||
-      !questionCount ||
-      questionCount > 15 ||
-      !["beginner", "intermediate", "advanced"].includes(String(difficulty))
+      (body.roleId !== null && body.roleId !== undefined && body.roleId !== "" && !roleId) ||
+      !["beginner", "intermediate", "advanced"].includes(String(difficulty)) ||
+      (body.title !== undefined && (typeof body.title !== "string" || title === null))
     ) {
       reply.code(400);
-      return { error: "skillId, questionCount (1-15), and a supported difficulty are required" };
+      return { error: "skillId and a supported difficulty are required" };
+    }
+    if (!Array.isArray(body.questions) || body.questions.length === 0 || body.questions.length > 50) {
+      reply.code(400);
+      return { error: "provide between 1 and 50 authored assessment questions" };
     }
     const skill = (await db.select().from(skillCatalogTable)
       .where(and(eq(skillCatalogTable.id, skillId), eq(skillCatalogTable.active, true)))
@@ -302,71 +359,70 @@ export function registerTalentRoutes(app: FastifyInstance) {
       reply.code(404);
       return { error: "active skill not found" };
     }
-
-    let generated: Awaited<ReturnType<typeof generateAssistantReply>>;
-    try {
-      generated = await generateAssistantReply(
-        [
-          `Create exactly ${questionCount} multiple-choice technical questions about ${skill.name}.`,
-          `Target difficulty: ${difficulty}.`,
-          "Use practical, unambiguous questions. Use one correct choice per question.",
-          "Return only JSON with this shape: {\"questions\":[{\"prompt\":\"...\",\"options\":[{\"id\":\"a\",\"label\":\"...\"},{\"id\":\"b\",\"label\":\"...\"},{\"id\":\"c\",\"label\":\"...\"}],\"answerKey\":\"a\",\"explanation\":\"...\"}]}.",
-          "Each question must have 3 to 5 choices with unique short ids. Do not include markdown or code that would need to run.",
-        ].join("\n"),
-        { role: "admin" },
-        "You draft objective technical assessment items for human review. Follow the user's requested JSON shape exactly and return valid JSON only.",
-      );
-    } catch (error) {
-      if (!(error instanceof AssistantError)) throw error;
-      reply.code(error.statusCode);
-      return { error: error.message };
+    if (roleId !== null) {
+      const role = (await db.select({ id: itRolesTable.id }).from(itRolesTable)
+        .where(and(eq(itRolesTable.id, roleId), eq(itRolesTable.active, true)))
+        .limit(1))[0];
+      if (!role) {
+        reply.code(404);
+        return { error: "active IT role not found" };
+      }
     }
-
-    let drafts;
+    let questions;
     try {
-      drafts = parseQuestionDrafts(generated.reply, questionCount);
+      questions = parseAssessmentQuestions(JSON.stringify({ questions: body.questions }), body.questions.length);
     } catch {
-      reply.code(502);
-      return { error: "Gemini returned an invalid question draft. No assessment content was saved." };
+      reply.code(400);
+      return { error: "assessment question content is invalid" };
     }
 
-    const title = `${skill.name} (${difficulty}) technical assessment`;
+    const assessmentTitle = title || `${skill.name} (${difficulty}) technical assessment`;
+    const durationMinutes = body.durationMinutes === undefined
+      ? Math.min(120, Math.max(10, questions.length * 2))
+      : Number(body.durationMinutes);
+    if (!Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 240) {
+      reply.code(400);
+      return { error: "durationMinutes must be an integer from 1 to 240" };
+    }
     const assessment = await db.transaction(async (transaction) => {
       const [template] = await transaction.insert(assessmentTemplatesTable).values({
-        title,
+        title: assessmentTitle,
+        roleId,
         skillId,
         difficulty: difficulty as "beginner" | "intermediate" | "advanced",
-        durationMinutes: Math.min(60, Math.max(10, questionCount * 2)),
+        durationMinutes,
         active: false,
       }).returning({ id: assessmentTemplatesTable.id });
       const [version] = await transaction.insert(assessmentVersionsTable).values({
         templateId: template.id,
         version: 1,
         status: "draft",
-        configuration: { questionCount, generatedModel: generated.model },
+        configuration: { questionCount: questions.length, authoredByUserId: admin.id },
         createdByUserId: admin.id,
       }).returning({ id: assessmentVersionsTable.id });
-      const questions = await transaction.insert(assessmentQuestionsTable).values(
-        drafts.map((draft, index) => ({
+      const insertedQuestions = await transaction.insert(assessmentQuestionsTable).values(
+        questions.map((question, index) => ({
           versionId: version.id,
           skillId,
           position: index + 1,
-          type: "single_choice" as const,
+          type: question.type,
           difficulty: difficulty as "beginner" | "intermediate" | "advanced",
-          prompt: draft.prompt,
-          options: draft.options,
-          answerKey: draft.answerKey,
-          maxPoints: "1",
-          explanation: draft.explanation,
+          prompt: question.prompt,
+          options: question.options,
+          answerKey: question.answerKey,
+          rubric: question.rubric,
+          maxPoints: String(question.maxPoints),
+          explanation: question.explanation,
         })),
       ).returning({ id: assessmentQuestionsTable.id });
-      return { template, version, questions };
+      return { template, version, questions: insertedQuestions };
     });
 
+    reply.code(201);
     return {
       assessmentId: assessment.version.id,
       templateId: assessment.template.id,
-      title,
+      title: assessmentTitle,
       status: "draft",
       questionCount: assessment.questions.length,
       requiresHumanReview: true,
@@ -429,7 +485,14 @@ export function registerTalentRoutes(app: FastifyInstance) {
     }
     let draft;
     try {
-      [draft] = parseQuestionDrafts(JSON.stringify({ questions: [body] }), 1);
+      [draft] = parseAssessmentQuestions(JSON.stringify({
+        questions: [{
+          ...body,
+          type: body.type ?? question.type,
+          rubric: body.rubric ?? question.rubric,
+          maxPoints: body.maxPoints ?? question.maxPoints,
+        }],
+      }), 1);
     } catch {
       reply.code(400);
       return { error: "question content is invalid" };
@@ -439,6 +502,8 @@ export function registerTalentRoutes(app: FastifyInstance) {
       prompt: draft.prompt,
       options: draft.options,
       answerKey: draft.answerKey,
+      rubric: draft.rubric,
+      maxPoints: String(draft.maxPoints),
       explanation: draft.explanation,
     }).where(eq(assessmentQuestionsTable.id, questionId));
     return { updated: true };
@@ -701,7 +766,17 @@ export function registerTalentRoutes(app: FastifyInstance) {
       db.select().from(studentExperienceTable).where(eq(studentExperienceTable.studentId, student.id)),
       db.select().from(studentEducationTable).where(eq(studentEducationTable.studentId, student.id)),
     ]);
-    return { skills: student.skills, projects, experience, education };
+    return {
+      university: student.university,
+      gpa: student.gpa,
+      bio: student.bio,
+      resumeUrl: student.resumeUrl,
+      verified: student.verified,
+      skills: student.skills,
+      projects,
+      experience,
+      education,
+    };
   });
 
   app.put("/api/talent/profile", async (request, reply) => {
@@ -713,8 +788,77 @@ export function registerTalentRoutes(app: FastifyInstance) {
       reply.code(400);
       return { error: "skills must be a list of at most 100 short text values" };
     }
-    await db.update(studentsTable).set({ skills }).where(eq(studentsTable.id, student.id));
-    return { skills };
+    const updates: Partial<typeof studentsTable.$inferInsert> = { skills };
+
+    if (body.university !== undefined) {
+      if (body.university !== null && typeof body.university !== "string") {
+        reply.code(400);
+        return { error: "university must be null or at most 200 characters" };
+      }
+      const university = body.university === null ? null : readText(body.university, 200);
+      if (university === null && body.university !== null) {
+        reply.code(400);
+        return { error: "university must be null or at most 200 characters" };
+      }
+      updates.university = university || null;
+    }
+    if (body.gpa !== undefined) {
+      const gpa = body.gpa === null ? null : body.gpa;
+      if (gpa !== null && (
+        typeof gpa !== "number" ||
+        !Number.isFinite(gpa) ||
+        gpa < 0 ||
+        gpa > 5
+      )) {
+        reply.code(400);
+        return { error: "gpa must be null or a number between 0 and 5" };
+      }
+      updates.gpa = gpa;
+    }
+    if (body.bio !== undefined) {
+      if (body.bio !== null && typeof body.bio !== "string") {
+        reply.code(400);
+        return { error: "bio must be null or at most 500 characters" };
+      }
+      const bio = body.bio === null ? null : readText(body.bio, 500);
+      if (bio === null && body.bio !== null) {
+        reply.code(400);
+        return { error: "bio must be null or at most 500 characters" };
+      }
+      updates.bio = bio || null;
+    }
+    if (body.resumeUrl !== undefined) {
+      if (body.resumeUrl !== null && typeof body.resumeUrl !== "string") {
+        reply.code(400);
+        return { error: "resumeUrl must be null or a valid HTTP(S) URL" };
+      }
+      const resumeUrl = body.resumeUrl === null ? null : readText(body.resumeUrl, 2048);
+      if (
+        (resumeUrl === null && body.resumeUrl !== null) ||
+        (resumeUrl && !/^https?:\/\//i.test(resumeUrl))
+      ) {
+        reply.code(400);
+        return { error: "resumeUrl must be null or a valid HTTP(S) URL" };
+      }
+      updates.resumeUrl = resumeUrl || null;
+    }
+
+    const updated = (await db.update(studentsTable)
+      .set(updates)
+      .where(eq(studentsTable.id, student.id))
+      .returning({
+        university: studentsTable.university,
+        gpa: studentsTable.gpa,
+        bio: studentsTable.bio,
+        resumeUrl: studentsTable.resumeUrl,
+        verified: studentsTable.verified,
+        skills: studentsTable.skills,
+      }))[0];
+    if (!updated) {
+      reply.code(500);
+      return { error: "student profile could not be updated" };
+    }
+    return updated;
   });
 
   app.put("/api/talent/profile/evidence", async (request, reply) => {
@@ -730,7 +874,7 @@ export function registerTalentRoutes(app: FastifyInstance) {
       return { error: "profile evidence exceeds the maximum item count" };
     }
 
-    const projects = [];
+    const projects: Array<typeof studentProjectsTable.$inferInsert> = [];
     for (const item of body.projects) {
       if (!isRecord(item)) {
         reply.code(400);
@@ -753,7 +897,7 @@ export function registerTalentRoutes(app: FastifyInstance) {
       projects.push({ studentId: student.id, name, description, skills, url: url || null, startedAt, completedAt });
     }
 
-    const experiences = [];
+    const experiences: Array<typeof studentExperienceTable.$inferInsert> = [];
     for (const item of body.experience) {
       if (!isRecord(item)) {
         reply.code(400);
@@ -775,7 +919,7 @@ export function registerTalentRoutes(app: FastifyInstance) {
       experiences.push({ studentId: student.id, organization, title, description, skills, startedAt, endedAt });
     }
 
-    const education = [];
+    const education: Array<typeof studentEducationTable.$inferInsert> = [];
     for (const item of body.education) {
       if (!isRecord(item)) {
         reply.code(400);
@@ -816,20 +960,95 @@ export function registerTalentRoutes(app: FastifyInstance) {
     return { saved: true };
   });
 
+  app.get("/api/talent/company/internships/:internshipId/requirements", async (request, reply) => {
+    const company = await getCompany(request, reply);
+    if (!company) return { error: "company account not found" };
+    const internshipId = parseId((request.params as { internshipId?: unknown }).internshipId);
+    if (!internshipId) {
+      reply.code(400);
+      return { error: "valid internship id is required" };
+    }
+    const internship = (await db.select({ id: internshipsTable.id })
+      .from(internshipsTable)
+      .where(and(
+        eq(internshipsTable.id, internshipId),
+        eq(internshipsTable.companyId, company.id),
+      ))
+      .limit(1))[0];
+    if (!internship) {
+      reply.code(404);
+      return { error: "internship not found" };
+    }
+    const requirements = (await db.select().from(internshipTalentRequirementsTable)
+      .where(eq(internshipTalentRequirementsTable.internshipId, internshipId))
+      .limit(1))[0];
+    return requirements ?? {
+      internshipId,
+      roleId: null,
+      requiredCoursework: [],
+      requiredFieldsOfStudy: [],
+      matchWeights: MATCH_WEIGHTS,
+      skillWeights: {},
+      minimumMatchScore: null,
+      minimumAssessmentScore: null,
+      requireVerifiedStudent: false,
+    };
+  });
+
   app.put("/api/talent/company/internships/:internshipId/requirements", async (request, reply) => {
     const company = await getCompany(request, reply);
     if (!company) return { error: "company account not found" };
     const internshipId = parseId((request.params as { internshipId?: unknown }).internshipId);
     const body = isRecord(request.body) ? request.body : {};
-    const requiredCoursework = readTextList(body.requiredCoursework ?? [], 100);
-    const requiredFieldsOfStudy = readTextList(body.requiredFieldsOfStudy ?? [], 50);
+    const existing = internshipId
+      ? (await db.select().from(internshipTalentRequirementsTable)
+          .where(eq(internshipTalentRequirementsTable.internshipId, internshipId))
+          .limit(1))[0]
+      : null;
+    const requiredCoursework = body.requiredCoursework === undefined
+      ? existing?.requiredCoursework ?? []
+      : readTextList(body.requiredCoursework, 100);
+    const requiredFieldsOfStudy = body.requiredFieldsOfStudy === undefined
+      ? existing?.requiredFieldsOfStudy ?? []
+      : readTextList(body.requiredFieldsOfStudy, 50);
+    const matchWeights = body.matchWeights === undefined
+      ? existing
+        ? parseMatchWeights(existing.matchWeights)
+        : MATCH_WEIGHTS
+      : parseMatchWeights(body.matchWeights);
+    const skillWeights = body.skillWeights === undefined
+      ? existing
+        ? parseSkillWeights(existing.skillWeights)
+        : {}
+      : parseSkillWeights(body.skillWeights);
+    const minimumMatchScore = body.minimumMatchScore === undefined
+      ? existing?.minimumMatchScore ?? null
+      : parseEligibilityScore(body.minimumMatchScore);
+    const minimumAssessmentScore = body.minimumAssessmentScore === undefined
+      ? existing?.minimumAssessmentScore ?? null
+      : parseEligibilityScore(body.minimumAssessmentScore);
+    const requireVerifiedStudent = body.requireVerifiedStudent === undefined
+      ? existing?.requireVerifiedStudent ?? false
+      : body.requireVerifiedStudent;
     const roleIsSet = body.roleId !== null && body.roleId !== undefined && body.roleId !== "";
-    const roleId = body.roleId === null || body.roleId === undefined || body.roleId === ""
+    const roleId = body.roleId === undefined
+      ? existing?.roleId ?? null
+      : body.roleId === null || body.roleId === ""
       ? null
       : parseId(body.roleId);
-    if (!internshipId || !requiredCoursework || !requiredFieldsOfStudy || (roleIsSet && roleId === null)) {
+    if (
+      !internshipId ||
+      !requiredCoursework ||
+      !requiredFieldsOfStudy ||
+      !matchWeights ||
+      !skillWeights ||
+      minimumMatchScore === undefined ||
+      minimumAssessmentScore === undefined ||
+      typeof requireVerifiedStudent !== "boolean" ||
+      (roleIsSet && roleId === null)
+    ) {
       reply.code(400);
-      return { error: "valid internship requirements are required" };
+      return { error: "requirements, weights, and eligibility criteria are invalid" };
     }
 
     const internship = (await db.select({ id: internshipsTable.id })
@@ -842,6 +1061,18 @@ export function registerTalentRoutes(app: FastifyInstance) {
     if (!internship) {
       reply.code(404);
       return { error: "internship not found" };
+    }
+    const activeSkills = await db.select({
+      slug: skillCatalogTable.slug,
+      name: skillCatalogTable.name,
+    }).from(skillCatalogTable).where(eq(skillCatalogTable.active, true));
+    const knownSkills = new Set(activeSkills.flatMap((skill) => [
+      normalize(skill.slug),
+      normalize(skill.name),
+    ]));
+    if (Object.keys(skillWeights).some((skill) => !knownSkills.has(skill))) {
+      reply.code(400);
+      return { error: "skillWeights must use active skill names or catalog slugs" };
     }
     if (roleId !== null) {
       const role = (await db.select({ id: itRolesTable.id }).from(itRolesTable)
@@ -859,12 +1090,37 @@ export function registerTalentRoutes(app: FastifyInstance) {
       roleId,
       requiredCoursework,
       requiredFieldsOfStudy,
+      matchWeights,
+      skillWeights,
+      minimumMatchScore,
+      minimumAssessmentScore,
+      requireVerifiedStudent,
       updatedAt,
     }).onConflictDoUpdate({
       target: internshipTalentRequirementsTable.internshipId,
-      set: { roleId, requiredCoursework, requiredFieldsOfStudy, updatedAt },
+      set: {
+        roleId,
+        requiredCoursework,
+        requiredFieldsOfStudy,
+        matchWeights,
+        skillWeights,
+        minimumMatchScore,
+        minimumAssessmentScore,
+        requireVerifiedStudent,
+        updatedAt,
+      },
     });
-    return { internshipId, roleId, requiredCoursework, requiredFieldsOfStudy };
+    return {
+      internshipId,
+      roleId,
+      requiredCoursework,
+      requiredFieldsOfStudy,
+      matchWeights,
+      skillWeights,
+      minimumMatchScore,
+      minimumAssessmentScore,
+      requireVerifiedStudent,
+    };
   });
 
   app.get("/api/talent/skills", async () => {
@@ -1096,18 +1352,27 @@ export function registerTalentRoutes(app: FastifyInstance) {
       return { error: "answer does not match the question format" };
     }
 
-    const pointsEarned = calculateQuestionPoints(question, answer);
+    const subjective = question.type === "short_answer";
+    const pointsEarned = subjective ? null : calculateQuestionPoints(question, answer);
     const answeredAt = new Date();
     await db.insert(assessmentAnswersTable).values({
       attemptId,
       questionId,
       answer,
-      pointsEarned: String(pointsEarned),
-      deterministic: true,
+      pointsEarned: pointsEarned === null ? null : String(pointsEarned),
+      deterministic: !subjective,
       answeredAt,
     }).onConflictDoUpdate({
       target: [assessmentAnswersTable.attemptId, assessmentAnswersTable.questionId],
-      set: { answer, pointsEarned: String(pointsEarned), answeredAt },
+      set: {
+        answer,
+        pointsEarned: pointsEarned === null ? null : String(pointsEarned),
+        deterministic: !subjective,
+        evaluatorNotes: null,
+        evaluatedByUserId: null,
+        evaluatedAt: null,
+        answeredAt,
+      },
     });
     return { saved: true, answeredAt };
   });
@@ -1136,7 +1401,12 @@ export function registerTalentRoutes(app: FastifyInstance) {
       db.select().from(assessmentAnswersTable).where(eq(assessmentAnswersTable.attemptId, attempt.id)),
     ]);
     const answersByQuestion = new Map(answers.map((answer) => [answer.questionId, answer]));
-    if (!questions.length || questions.some((question) => !answersByQuestion.has(question.id))) {
+    if (!questions.length || questions.some((question) => {
+      const answer = answersByQuestion.get(question.id);
+      return !answer ||
+        (question.type === "short_answer" &&
+          (typeof answer.answer !== "string" || !answer.answer.trim()));
+    })) {
       reply.code(400);
       return { error: "answer every question before submitting" };
     }
@@ -1144,9 +1414,14 @@ export function registerTalentRoutes(app: FastifyInstance) {
     let earned = 0;
     let possible = 0;
     const bySkill = new Map<number, { earned: number; possible: number }>();
+    let hasSubjectiveQuestions = false;
     for (const question of questions) {
       const answer = answersByQuestion.get(question.id)!;
       const pointsPossible = Number(question.maxPoints);
+      if (question.type === "short_answer") {
+        hasSubjectiveQuestions = true;
+        continue;
+      }
       const pointsEarned = calculateQuestionPoints(question, answer.answer);
       earned += pointsEarned;
       possible += pointsPossible;
@@ -1156,10 +1431,184 @@ export function registerTalentRoutes(app: FastifyInstance) {
       bySkill.set(question.skillId, skillPoints);
     }
 
-    const overallScore = Math.round(earned / possible * 10_000) / 100;
+    const overallScore = hasSubjectiveQuestions ? null : Math.round(earned / possible * 10_000) / 100;
     const submittedAt = new Date();
     await db.transaction(async (transaction) => {
-      for (const [skillId, score] of bySkill) {
+      if (!hasSubjectiveQuestions) {
+        for (const [skillId, score] of bySkill) {
+          await transaction.insert(assessmentSkillScoresTable).values({
+            attemptId: attempt.id,
+            skillId,
+            score: Math.round(score.earned / score.possible * 10_000) / 100,
+            earnedPoints: String(score.earned),
+            possiblePoints: String(score.possible),
+          }).onConflictDoUpdate({
+            target: [assessmentSkillScoresTable.attemptId, assessmentSkillScoresTable.skillId],
+            set: {
+              score: Math.round(score.earned / score.possible * 10_000) / 100,
+              earnedPoints: String(score.earned),
+              possiblePoints: String(score.possible),
+            },
+          });
+        }
+      }
+      await transaction.update(assessmentAttemptsTable).set({
+        status: hasSubjectiveQuestions ? "pending_review" : "submitted",
+        submittedAt,
+        overallScore,
+        resultExplanation: hasSubjectiveQuestions
+          ? "Objective answers were scored automatically. Subjective answers are awaiting human review against the published rubric."
+          : "Scores are calculated deterministically from reviewed answer keys.",
+      }).where(eq(assessmentAttemptsTable.id, attempt.id));
+    });
+
+    const updatedAttempt = (await db.select().from(assessmentAttemptsTable)
+      .where(eq(assessmentAttemptsTable.id, attempt.id))
+      .limit(1))[0];
+    return buildAttemptResponse(updatedAttempt);
+  });
+
+  app.get("/api/talent/admin/assessment-attempts/pending-review", async (request, reply) => {
+    const admin = await getAdminUser(request, reply);
+    if (!admin) return { error: "administrator access required" };
+    const attempts = await db.select({
+      id: assessmentAttemptsTable.id,
+      studentId: assessmentAttemptsTable.studentId,
+      versionId: assessmentAttemptsTable.versionId,
+      submittedAt: assessmentAttemptsTable.submittedAt,
+      title: assessmentTemplatesTable.title,
+    }).from(assessmentAttemptsTable)
+      .innerJoin(assessmentVersionsTable, eq(assessmentVersionsTable.id, assessmentAttemptsTable.versionId))
+      .innerJoin(assessmentTemplatesTable, eq(assessmentTemplatesTable.id, assessmentVersionsTable.templateId))
+      .where(eq(assessmentAttemptsTable.status, "pending_review"))
+      .orderBy(asc(assessmentAttemptsTable.submittedAt))
+      .limit(100);
+    if (!attempts.length) return [];
+    const [questions, answers] = await Promise.all([
+      db.select().from(assessmentQuestionsTable)
+        .where(inArray(assessmentQuestionsTable.versionId, attempts.map((attempt) => attempt.versionId))),
+      db.select().from(assessmentAnswersTable)
+        .where(inArray(assessmentAnswersTable.attemptId, attempts.map((attempt) => attempt.id))),
+    ]);
+    const answersByAttempt = new Map<number, typeof answers>();
+    for (const answer of answers) {
+      const items = answersByAttempt.get(answer.attemptId) ?? [];
+      items.push(answer);
+      answersByAttempt.set(answer.attemptId, items);
+    }
+    return attempts.map((attempt) => {
+      const answersByQuestion = new Map(
+        (answersByAttempt.get(attempt.id) ?? []).map((answer) => [answer.questionId, answer]),
+      );
+      return {
+        attemptId: attempt.id,
+        studentId: attempt.studentId,
+        assessmentTitle: attempt.title,
+        submittedAt: attempt.submittedAt,
+        questions: questions
+          .filter((question) => question.versionId === attempt.versionId && question.type === "short_answer")
+          .map((question) => ({
+            questionId: question.id,
+            prompt: question.prompt,
+            answer: answersByQuestion.get(question.id)?.answer ?? null,
+            rubric: question.rubric,
+            maxPoints: question.maxPoints,
+            previousGrade: answersByQuestion.get(question.id)?.pointsEarned ?? null,
+            evaluatorNotes: answersByQuestion.get(question.id)?.evaluatorNotes ?? null,
+          })),
+      };
+    });
+  });
+
+  app.post("/api/talent/admin/assessment-attempts/:attemptId/questions/:questionId/grade", async (request, reply) => {
+    const admin = await getAdminUser(request, reply);
+    if (!admin) return { error: "administrator access required" };
+    const params = request.params as { attemptId?: unknown; questionId?: unknown };
+    const attemptId = parseId(params.attemptId);
+    const questionId = parseId(params.questionId);
+    const body = isRecord(request.body) ? request.body : {};
+    const notes = readText(body.notes ?? "", 2000);
+    const attempt = attemptId
+      ? (await db.select().from(assessmentAttemptsTable)
+          .where(eq(assessmentAttemptsTable.id, attemptId)).limit(1))[0]
+      : null;
+    if (!attemptId || !questionId) {
+      reply.code(400);
+      return { error: "valid attempt and question ids are required" };
+    }
+    if (!attempt || attempt.status !== "pending_review") {
+      reply.code(409);
+      return { error: "assessment attempt is not awaiting human review" };
+    }
+    const question = (await db.select().from(assessmentQuestionsTable)
+      .where(and(
+        eq(assessmentQuestionsTable.id, questionId),
+        eq(assessmentQuestionsTable.versionId, attempt.versionId),
+      ))
+      .limit(1))[0];
+    if (!question || question.type !== "short_answer") {
+      reply.code(404);
+      return { error: "subjective assessment question not found" };
+    }
+    const answer = (await db.select().from(assessmentAnswersTable)
+      .where(and(
+        eq(assessmentAnswersTable.attemptId, attempt.id),
+        eq(assessmentAnswersTable.questionId, question.id),
+      ))
+      .limit(1))[0];
+    if (!answer) {
+      reply.code(409);
+      return { error: "student has not submitted an answer to this question" };
+    }
+    const pointsEarned = validateRubricGrade(question, body.criteria);
+    if (
+      pointsEarned === null ||
+      (body.notes !== undefined && (typeof body.notes !== "string" || notes === null))
+    ) {
+      reply.code(400);
+      return { error: "provide a valid score for every rubric criterion and notes of at most 2,000 characters" };
+    }
+    await db.update(assessmentAnswersTable).set({
+      pointsEarned: String(pointsEarned),
+      deterministic: false,
+      evaluatorNotes: notes || null,
+      evaluatedByUserId: admin.id,
+      evaluatedAt: new Date(),
+    }).where(eq(assessmentAnswersTable.id, answer.id));
+
+    const [questions, answers] = await Promise.all([
+      db.select().from(assessmentQuestionsTable)
+        .where(eq(assessmentQuestionsTable.versionId, attempt.versionId)),
+      db.select().from(assessmentAnswersTable)
+        .where(eq(assessmentAnswersTable.attemptId, attempt.id)),
+    ]);
+    const answersByQuestion = new Map(answers.map((item) => [item.questionId, item]));
+    const pendingReview = questions.some((item) =>
+      item.type === "short_answer" && !answersByQuestion.get(item.id)?.evaluatedAt,
+    );
+    if (pendingReview) return { graded: true, finalized: false, pointsEarned };
+
+    let totalEarned = 0;
+    let totalPossible = 0;
+    const pointsBySkill = new Map<number, { earned: number; possible: number }>();
+    for (const item of questions) {
+      const itemAnswer = answersByQuestion.get(item.id);
+      if (!itemAnswer || itemAnswer.pointsEarned === null) {
+        reply.code(409);
+        return { error: "every assessment answer must be scored before finalizing results" };
+      }
+      const possiblePoints = Number(item.maxPoints);
+      const earnedPoints = Number(itemAnswer.pointsEarned);
+      totalEarned += earnedPoints;
+      totalPossible += possiblePoints;
+      const skillPoints = pointsBySkill.get(item.skillId) ?? { earned: 0, possible: 0 };
+      skillPoints.earned += earnedPoints;
+      skillPoints.possible += possiblePoints;
+      pointsBySkill.set(item.skillId, skillPoints);
+    }
+    const overallScore = Math.round(totalEarned / totalPossible * 10_000) / 100;
+    await db.transaction(async (transaction) => {
+      for (const [skillId, score] of pointsBySkill) {
         await transaction.insert(assessmentSkillScoresTable).values({
           attemptId: attempt.id,
           skillId,
@@ -1177,72 +1626,39 @@ export function registerTalentRoutes(app: FastifyInstance) {
       }
       await transaction.update(assessmentAttemptsTable).set({
         status: "submitted",
-        submittedAt,
         overallScore,
-        resultExplanation: "Scores are calculated deterministically from reviewed answer keys. The explanatory text does not affect the score.",
-        explanationModel: null,
-      }).where(eq(assessmentAttemptsTable.id, attempt.id));
+        resultExplanation: "Objective answers were scored from reviewed answer keys and subjective answers were scored by a human reviewer against the published rubric.",
+      }).where(and(
+        eq(assessmentAttemptsTable.id, attempt.id),
+        eq(assessmentAttemptsTable.status, "pending_review"),
+      ));
     });
-
-    let explanationWarning: string | undefined;
-    try {
-      const skillNames = await db.select({
-        id: skillCatalogTable.id,
-        name: skillCatalogTable.name,
-      }).from(skillCatalogTable)
-        .where(inArray(skillCatalogTable.id, [...bySkill.keys()]));
-      const skillNamesById = new Map(skillNames.map((skill) => [skill.id, skill.name]));
-      const explanation = await generateAssistantReply(
-        [
-          "Explain these completed technical assessment results in plain language.",
-          "The numerical scores were calculated deterministically and must not be changed or treated as a hiring decision.",
-          "Describe demonstrated strengths and practical next learning steps. Do not infer personal traits.",
-          JSON.stringify({
-            overallScore,
-            skillScores: [...bySkill].map(([skillId, score]) => ({
-              skill: skillNamesById.get(skillId) ?? "Technical skill",
-              score: Math.round(score.earned / score.possible * 10_000) / 100,
-            })),
-          }),
-        ].join("\n"),
-        { role: "student" },
-      );
-      await db.update(assessmentAttemptsTable).set({
-        resultExplanation: explanation.reply,
-        explanationModel: explanation.model,
-      }).where(eq(assessmentAttemptsTable.id, attempt.id));
-    } catch (error) {
-      if (!(error instanceof AssistantError)) throw error;
-      explanationWarning = error.message;
-    }
-
-    const updatedAttempt = (await db.select().from(assessmentAttemptsTable)
-      .where(eq(assessmentAttemptsTable.id, attempt.id))
-      .limit(1))[0];
-    return {
-      ...(await buildAttemptResponse(updatedAttempt)),
-      ...(explanationWarning ? { explanationWarning } : {}),
-    };
+    return { graded: true, finalized: true, pointsEarned, overallScore };
   });
 
   const recommendationHandler = async (
     request: FastifyRequest,
     reply: FastifyReply,
-    requestedStudentId?: unknown,
+    requestedUserId?: unknown,
+    requestedInternshipId?: number,
   ) => {
     const student = await getStudent(request, reply);
     if (!student) return { error: "student account not found" };
     if (
-      requestedStudentId !== undefined &&
-      parseId(requestedStudentId) !== student.id &&
-      parseId(requestedStudentId) !== student.userId
+      requestedUserId !== undefined &&
+      parseId(requestedUserId) !== student.userId
     ) {
       reply.code(403);
-      return { error: "student access required" };
+      return { error: "userId must match the authenticated student account" };
     }
 
     const [internships, projects, experience, education, latestAssessmentScores, allSkills] = await Promise.all([
-      db.select().from(internshipsTable).where(eq(internshipsTable.status, "open")),
+      requestedInternshipId === undefined
+        ? db.select().from(internshipsTable).where(eq(internshipsTable.status, "open"))
+        : db.select().from(internshipsTable).where(and(
+            eq(internshipsTable.id, requestedInternshipId),
+            eq(internshipsTable.status, "open"),
+          )),
       db.select().from(studentProjectsTable).where(eq(studentProjectsTable.studentId, student.id)),
       db.select().from(studentExperienceTable).where(eq(studentExperienceTable.studentId, student.id)),
       db.select().from(studentEducationTable).where(eq(studentEducationTable.studentId, student.id)),
@@ -1289,15 +1705,21 @@ export function registerTalentRoutes(app: FastifyInstance) {
           roleId: roleSkillRequirementsTable.roleId,
           skillSlug: skillCatalogTable.slug,
           skillName: skillCatalogTable.name,
+          importance: roleSkillRequirementsTable.importance,
         }).from(roleSkillRequirementsTable)
           .innerJoin(skillCatalogTable, eq(skillCatalogTable.id, roleSkillRequirementsTable.skillId))
           .where(inArray(roleSkillRequirementsTable.roleId, roleIds))
       : [];
     const roleSkills = new Map<number, string[]>();
+    const roleSkillWeights = new Map<number, Record<string, number>>();
     for (const row of roleSkillRows) {
       const skills = roleSkills.get(row.roleId) ?? [];
       skills.push(row.skillName);
       roleSkills.set(row.roleId, skills);
+      const weights = roleSkillWeights.get(row.roleId) ?? {};
+      weights[normalize(row.skillSlug)] = row.importance;
+      weights[normalize(row.skillName)] = row.importance;
+      roleSkillWeights.set(row.roleId, weights);
     }
 
     const assessmentScores: Record<string, number> = {};
@@ -1314,13 +1736,30 @@ export function registerTalentRoutes(app: FastifyInstance) {
     const coursework = education.flatMap((entry) => entry.coursework);
     const fieldsOfStudy = education.flatMap((entry) => entry.fieldOfStudy ? [entry.fieldOfStudy] : []);
 
-    const recommendations = internships.map((internship) => {
+    const rankedRecommendations = internships.map((internship) => {
       const requirement = requirementsByInternship.get(internship.id);
       const requiredSkills = canonicalizeSkills([
         ...internship.skills,
         ...(requirement?.roleId ? roleSkills.get(requirement.roleId) ?? [] : []),
       ]);
       const requiredSkillSet = [...new Set(requiredSkills)];
+      const configuredSkillWeights = requirement
+        ? parseSkillWeights(requirement.skillWeights)
+        : {};
+      const configuredMatchWeights = requirement
+        ? parseMatchWeights(requirement.matchWeights)
+        : MATCH_WEIGHTS;
+      if (!configuredSkillWeights || !configuredMatchWeights) {
+        throw new Error(`Internship ${internship.id} has invalid saved matching rules.`);
+      }
+      const inheritedSkillWeights = requirement?.roleId
+        ? roleSkillWeights.get(requirement.roleId) ?? {}
+        : {};
+      const skillWeights: Record<string, number> = {};
+      for (const skill of requiredSkillSet) {
+        const key = normalize(skill);
+        skillWeights[key] = configuredSkillWeights[key] ?? inheritedSkillWeights[key] ?? 1;
+      }
       const evidenceSkillSet = new Set(canonicalizeSkills([
         ...student.skills,
         ...projectSkills,
@@ -1338,6 +1777,14 @@ export function registerTalentRoutes(app: FastifyInstance) {
         coursework,
         requiredFieldsOfStudy: requirement?.requiredFieldsOfStudy ?? [],
         fieldsOfStudy,
+        studentVerified: student.verified,
+        skillWeights,
+        matchWeights: configuredMatchWeights,
+        eligibility: {
+          minimumMatchScore: requirement?.minimumMatchScore,
+          minimumAssessmentScore: requirement?.minimumAssessmentScore,
+          requireVerifiedStudent: requirement?.requireVerifiedStudent,
+        },
       });
       return {
         id: internship.id,
@@ -1361,11 +1808,19 @@ export function registerTalentRoutes(app: FastifyInstance) {
           : String(internship.createdAt),
         matchScore: breakdown.score,
         evidenceCoverage: breakdown.coverage,
-        weights: MATCH_WEIGHTS,
+        weights: breakdown.weights,
         breakdown: breakdown.components,
+        eligible: breakdown.eligible,
+        eligibilityReasons: breakdown.eligibilityReasons,
         matchExplanation: explainMatch(breakdown),
       };
-    }).sort((left, right) => (right.matchScore ?? -1) - (left.matchScore ?? -1)).slice(0, 100);
+    }).sort((left, right) =>
+      Number(right.eligible) - Number(left.eligible) ||
+      (right.matchScore ?? -1) - (left.matchScore ?? -1),
+    );
+    const recommendations = requestedInternshipId === undefined
+      ? rankedRecommendations.slice(0, 100)
+      : rankedRecommendations;
     if (
       request.method === "POST" &&
       request.url.split("?")[0] === "/api/talent/recommendations/refresh" &&
@@ -1398,25 +1853,26 @@ export function registerTalentRoutes(app: FastifyInstance) {
       .where(eq(internshipsTable.status, "open"))
       .orderBy(desc(internshipsTable.createdAt))
       .limit(200);
-    const matchingInternships = internships.filter((internship) =>
+    const candidateInternships = internships.filter((internship) =>
       (!location || (internship.location ?? "").toLocaleLowerCase().includes(location)) &&
       (!type || (internship.type ?? "").toLocaleLowerCase().includes(type)) &&
-      (!skill || internship.skills.some((item) => item.toLocaleLowerCase() === skill)) &&
-      (!search || `${internship.title} ${internship.description} ${internship.skills.join(" ")}`
-        .toLocaleLowerCase().includes(search)),
+      (!skill || internship.skills.some((item) => item.toLocaleLowerCase() === skill)),
     );
-    const companyIds = [...new Set(matchingInternships.map((internship) => internship.companyId))];
-    const internshipIds = matchingInternships.map((internship) => internship.id);
-    const [companies, applications] = await Promise.all([
-      companyIds.length
-        ? db.select().from(companiesTable).where(inArray(companiesTable.id, companyIds))
-        : [],
-      internshipIds.length
-        ? db.select({ internshipId: applicationsTable.internshipId }).from(applicationsTable)
-            .where(inArray(applicationsTable.internshipId, internshipIds))
-        : [],
-    ]);
+    const companyIds = [...new Set(candidateInternships.map((internship) => internship.companyId))];
+    const companies = companyIds.length
+      ? await db.select().from(companiesTable).where(inArray(companiesTable.id, companyIds))
+      : [];
     const companiesById = new Map(companies.map((company) => [company.id, company]));
+    const matchingInternships = candidateInternships.filter((internship) => {
+      const companyName = companiesById.get(internship.companyId)?.companyName ?? "";
+      return !search || `${internship.title} ${internship.description} ${internship.skills.join(" ")} ${companyName}`
+        .toLocaleLowerCase().includes(search);
+    });
+    const internshipIds = matchingInternships.map((internship) => internship.id);
+    const applications = internshipIds.length
+      ? await db.select({ internshipId: applicationsTable.internshipId }).from(applicationsTable)
+          .where(inArray(applicationsTable.internshipId, internshipIds))
+      : [];
     const applicantCounts = new Map<number, number>();
     for (const application of applications) {
       applicantCounts.set(application.internshipId, (applicantCounts.get(application.internshipId) ?? 0) + 1);
@@ -1435,10 +1891,10 @@ export function registerTalentRoutes(app: FastifyInstance) {
   app.get("/api/companies/:id/internships", async (request, reply) => {
     const company = await getCompany(request, reply);
     if (!company) return { error: "company account not found" };
-    const requestedId = parseId((request.params as { id?: unknown }).id);
-    if (requestedId !== company.id && requestedId !== company.userId) {
+    const requestedUserId = parseId((request.params as { id?: unknown }).id);
+    if (requestedUserId !== company.userId) {
       reply.code(403);
-      return { error: "company access required" };
+      return { error: "user id must match the authenticated company account" };
     }
     const internships = await db.select().from(internshipsTable)
       .where(eq(internshipsTable.companyId, company.id))
@@ -1536,29 +1992,37 @@ export function registerTalentRoutes(app: FastifyInstance) {
       reply.code(400);
       return { error: "valid internship id is required" };
     }
-    const internship = (await db.select({ id: internshipsTable.id })
-      .from(internshipsTable)
-      .where(and(
+    const result = await db.transaction(async (transaction) => {
+      const internship = (await transaction.select({ id: internshipsTable.id })
+        .from(internshipsTable)
+        .where(and(
+          eq(internshipsTable.id, id),
+          eq(internshipsTable.companyId, company.id),
+        ))
+        .for("update")
+        .limit(1))[0];
+      if (!internship) return "not_found" as const;
+
+      const application = (await transaction.select({ id: applicationsTable.id })
+        .from(applicationsTable)
+        .where(eq(applicationsTable.internshipId, id))
+        .limit(1))[0];
+      if (application) return "has_applications" as const;
+
+      await transaction.delete(internshipsTable).where(and(
         eq(internshipsTable.id, id),
         eq(internshipsTable.companyId, company.id),
-      ))
-      .limit(1))[0];
-    if (!internship) {
+      ));
+      return "deleted" as const;
+    });
+    if (result === "not_found") {
       reply.code(404);
       return { error: "internship not found" };
     }
-    const applications = await db.select({ id: applicationsTable.id })
-      .from(applicationsTable)
-      .where(eq(applicationsTable.internshipId, id))
-      .limit(1);
-    if (applications.length) {
+    if (result === "has_applications") {
       reply.code(409);
       return { error: "internships with applications cannot be deleted; close the posting instead" };
     }
-    await db.delete(internshipsTable).where(and(
-      eq(internshipsTable.id, id),
-      eq(internshipsTable.companyId, company.id),
-    ));
     reply.code(204);
     return null;
   });
@@ -1567,12 +2031,12 @@ export function registerTalentRoutes(app: FastifyInstance) {
     const student = await getStudent(request, reply);
     if (!student) return { error: "student account not found" };
     const id = parseId((request.params as { id?: unknown }).id);
-    const requestedStudentId = parseId((request.query as { studentId?: unknown }).studentId);
-    if (!id || (requestedStudentId !== student.id && requestedStudentId !== student.userId)) {
+    const requestedUserId = parseId((request.query as { studentId?: unknown }).studentId);
+    if (!id || requestedUserId !== student.userId) {
       reply.code(403);
-      return { error: "match access is limited to the authenticated student" };
+      return { error: "user id must match the authenticated student account" };
     }
-    const recommendations = await recommendationHandler(request, reply);
+    const recommendations = await recommendationHandler(request, reply, undefined, id);
     if (!Array.isArray(recommendations)) return recommendations;
     const match = recommendations.find((recommendation) => recommendation.id === id);
     if (!match) {
@@ -1584,6 +2048,8 @@ export function registerTalentRoutes(app: FastifyInstance) {
       matchExplanation: match.matchExplanation,
       matchedSkills: match.matchedSkills,
       missingSkills: match.missingSkills,
+      eligible: match.eligible,
+      eligibilityReasons: match.eligibilityReasons,
     };
   });
 
@@ -1596,6 +2062,10 @@ export function registerTalentRoutes(app: FastifyInstance) {
     if (!internshipId || coverLetter === null) {
       reply.code(400);
       return { error: "valid internship id and cover letter are required" };
+    }
+    if (body.studentId !== undefined && parseId(body.studentId) !== student.userId) {
+      reply.code(403);
+      return { error: "student user id must match the authenticated account" };
     }
     const internship = (await db.select({ id: internshipsTable.id, status: internshipsTable.status })
       .from(internshipsTable)
@@ -1616,18 +2086,42 @@ export function registerTalentRoutes(app: FastifyInstance) {
       reply.code(409);
       return { error: "you have already applied to this internship" };
     }
-    const recommendations = await recommendationHandler(request, reply);
+    const recommendations = await recommendationHandler(request, reply, undefined, internshipId);
     if (!Array.isArray(recommendations)) return recommendations;
     const match = recommendations.find((recommendation) => recommendation.id === internshipId);
+    if (!match) {
+      reply.code(404);
+      return { error: "internship recommendation not found" };
+    }
+    if (!match.eligible) {
+      reply.code(409);
+      return {
+        error: "you do not meet this internship's eligibility criteria",
+        eligibilityReasons: match.eligibilityReasons,
+      };
+    }
     const matchScore = match?.matchScore === null || match?.matchScore === undefined
       ? null
       : Math.round(match.matchScore);
-    const created = (await db.insert(applicationsTable).values({
-      studentId: student.id,
-      internshipId,
-      coverLetter: coverLetter || null,
-      matchScore,
-    }).returning())[0];
+    let created: typeof applicationsTable.$inferSelect;
+    try {
+      created = (await db.insert(applicationsTable).values({
+        studentId: student.id,
+        internshipId,
+        coverLetter: coverLetter || null,
+        matchScore,
+      }).returning())[0];
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        reply.code(409);
+        return { error: "you have already applied to this internship" };
+      }
+      if (isForeignKeyViolation(error)) {
+        reply.code(409);
+        return { error: "the student account or internship changed while applying; please retry" };
+      }
+      throw error;
+    }
     reply.code(201);
     return created;
   });
@@ -1635,10 +2129,10 @@ export function registerTalentRoutes(app: FastifyInstance) {
   app.get("/api/students/:id/applications", async (request, reply) => {
     const student = await getStudent(request, reply);
     if (!student) return { error: "student account not found" };
-    const requestedId = parseId((request.params as { id?: unknown }).id);
-    if (requestedId !== student.id && requestedId !== student.userId) {
+    const requestedUserId = parseId((request.params as { id?: unknown }).id);
+    if (requestedUserId !== student.userId) {
       reply.code(403);
-      return { error: "application access is limited to the authenticated student" };
+      return { error: "user id must match the authenticated student account" };
     }
     const applications = await db.select().from(applicationsTable)
       .where(eq(applicationsTable.studentId, student.id))
@@ -1697,18 +2191,29 @@ export function registerTalentRoutes(app: FastifyInstance) {
       : [];
     const studentsById = new Map(students.map((student) => [student.id, student]));
     const usersById = new Map(users.map((user) => [user.id, user]));
+    const applicationsById = new Map(applications.map((application) => [application.id, application]));
     const consents = applications.length
       ? await db.select({
           applicationId: companyAssessmentConsentsTable.applicationId,
           studentId: companyAssessmentConsentsTable.studentId,
+          revokedAt: companyAssessmentConsentsTable.revokedAt,
         }).from(companyAssessmentConsentsTable)
-          .where(and(
-            inArray(companyAssessmentConsentsTable.applicationId, applications.map((application) => application.id)),
-            isNull(companyAssessmentConsentsTable.revokedAt),
-          ))
+          .where(inArray(companyAssessmentConsentsTable.applicationId, applications.map((application) => application.id)))
       : [];
-    const consentByApplicationId = new Map(consents.map((consent) => [consent.applicationId, consent.studentId]));
-    const consentedStudentIds = [...new Set(consents.map((consent) => consent.studentId))];
+    const consentsByApplicationId = new Map<number, typeof consents>();
+    for (const consent of consents) {
+      const applicationConsents = consentsByApplicationId.get(consent.applicationId) ?? [];
+      applicationConsents.push(consent);
+      consentsByApplicationId.set(consent.applicationId, applicationConsents);
+    }
+    const consentedStudentIds = [...new Set(consents.flatMap((consent) => {
+      const application = applicationsById.get(consent.applicationId);
+      return application && hasValidCompanyAssessmentConsent(
+        [consent],
+        application.id,
+        application.studentId,
+      ) ? [consent.studentId] : [];
+    }))];
     const scores = consentedStudentIds.length
       ? await db.select({
           studentId: assessmentAttemptsTable.studentId,
@@ -1738,7 +2243,6 @@ export function registerTalentRoutes(app: FastifyInstance) {
     return applications.map((application) => {
       const student = studentsById.get(application.studentId);
       const user = student ? usersById.get(student.userId) : null;
-      const consentedStudentId = consentByApplicationId.get(application.id);
       return {
         id: application.id,
         studentId: application.studentId,
@@ -1752,8 +2256,12 @@ export function registerTalentRoutes(app: FastifyInstance) {
         matchScore: application.matchScore,
         status: application.status,
         createdAt: application.createdAt,
-        ...(consentedStudentId === application.studentId ? {
-          assessmentScores: scoresByStudent.get(consentedStudentId) ?? [],
+        ...(hasValidCompanyAssessmentConsent(
+          consentsByApplicationId.get(application.id) ?? [],
+          application.id,
+          application.studentId,
+        ) ? {
+          assessmentScores: scoresByStudent.get(application.studentId) ?? [],
         } : {}),
       };
     });
@@ -1801,40 +2309,4 @@ export function registerTalentRoutes(app: FastifyInstance) {
     return updated;
   });
 
-  app.post("/api/talent/recommendations/:internshipId/explanation", async (request, reply) => {
-    const internshipId = parseId((request.params as { internshipId?: unknown }).internshipId);
-    if (!internshipId) {
-      reply.code(400);
-      return { error: "valid internship id is required" };
-    }
-    const recommendations = await recommendationHandler(request, reply);
-    if (!Array.isArray(recommendations)) return recommendations;
-    const recommendation = recommendations.find((item) => item.id === internshipId);
-    if (!recommendation) {
-      reply.code(404);
-      return { error: "internship recommendation not found" };
-    }
-    try {
-      const generated = await generateAssistantReply(
-        [
-          "Explain why this internship is recommended using only the provided evidence.",
-          "The match score and weights are deterministic and must not be changed.",
-          "Do not make or imply a hiring decision. Mention missing evidence and avoid inferring anything not present.",
-          JSON.stringify({
-            title: recommendation.title,
-            score: recommendation.matchScore,
-            evidenceCoverage: recommendation.evidenceCoverage,
-            weights: recommendation.weights,
-            componentScores: recommendation.breakdown,
-          }),
-        ].join("\n"),
-        { role: "student" },
-      );
-      return { explanation: generated.reply, model: generated.model };
-    } catch (error) {
-      if (!(error instanceof AssistantError)) throw error;
-      reply.code(error.statusCode);
-      return { error: error.message };
-    }
-  });
 }

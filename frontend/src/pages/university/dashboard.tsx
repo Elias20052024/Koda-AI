@@ -12,31 +12,31 @@ export default function UniversityDashboard() {
   const { toast } = useToast();
   const universityId = auth?.user?.id || 0;
 
-  const { data: dashboard, isLoading: dashLoading } = useGetUniversityDashboard(
+  const {
+    data: dashboard,
+    isLoading: dashLoading,
+    isError: dashboardError,
+    error: dashboardErrorDetails,
+    refetch: refetchDashboard,
+  } = useGetUniversityDashboard(
     { universityId },
     { query: { enabled: !!universityId, queryKey: ['university-dashboard', universityId] } }
   );
 
-  const { data: requests, refetch, isLoading: requestsLoading } = useListVerificationRequests(
+  const {
+    data: requests,
+    refetch: refetchRequests,
+    isLoading: requestsLoading,
+    isError: requestsError,
+    error: requestsErrorDetails,
+  } = useListVerificationRequests(
     { universityId },
     { query: { enabled: !!universityId, queryKey: ['verification-requests', universityId] } }
   );
 
   const updateMutation = useUpdateVerificationStatus();
 
-  const mockDashboard = {
-    totalStudents: 450,
-    verifiedStudents: 412,
-    pendingVerifications: 5,
-    placedStudents: 128,
-  };
-
-  const mockRequests = [
-    { id: 1, studentName: "Alice Walker", studentEmail: "alice.w@univ.edu", status: "pending", createdAt: new Date().toISOString() },
-    { id: 2, studentName: "Bob Smith", studentEmail: "bsmith@univ.edu", status: "pending", createdAt: new Date().toISOString() },
-  ];
-
-  if ((dashLoading || requestsLoading) && !dashboard && !requests) {
+  if (dashLoading || requestsLoading) {
     return (
       <div className="flex justify-center p-12">
         <Loader2 className="animate-spin text-primary h-8 w-8" />
@@ -44,19 +44,47 @@ export default function UniversityDashboard() {
     );
   }
 
-  const data = dashboard || mockDashboard;
-  const pendingRequests = (requests || mockRequests).filter(r => r.status === 'pending');
+  if (dashboardError || requestsError || !dashboard || !requests) {
+    const errorDetails = dashboardErrorDetails ?? requestsErrorDetails;
+    return (
+      <div className="space-y-4 p-8 text-center">
+        <h1 className="text-2xl font-semibold">Could not load university dashboard data</h1>
+        <p className="text-muted-foreground">
+          {errorDetails instanceof Error ? errorDetails.message : "Dashboard data is unavailable."}
+        </p>
+        <Button
+          variant="outline"
+          onClick={() => {
+            void refetchDashboard();
+            void refetchRequests();
+          }}
+        >
+          Try again
+        </Button>
+      </div>
+    );
+  }
 
-  const handleVerify = async (id: number, status: 'approved' | 'rejected') => {
+  const data = dashboard;
+  const pendingRequests = requests.filter((request) => request.status === 'pending');
+
+  const handleVerify = async (verificationRequestId: number, status: 'approved' | 'rejected') => {
     try {
       await updateMutation.mutateAsync({
+        id: verificationRequestId,
         data: { status }
       });
       toast({ title: `Student ${status} successfully.` });
-      refetch();
-    } catch (e) {
-      toast({ title: `Action completed (Demo Mode)` });
+    } catch (mutationError) {
+      toast({
+        variant: "destructive",
+        title: `Could not ${status === 'approved' ? 'approve' : 'reject'} verification request`,
+        description: mutationError instanceof Error ? mutationError.message : "Please try again.",
+      });
+      return;
     }
+    void refetchRequests();
+    void refetchDashboard();
   };
 
   return (
@@ -153,12 +181,14 @@ export default function UniversityDashboard() {
                       variant="outline" 
                       className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/20"
                       onClick={() => handleVerify(req.id, 'rejected')}
+                      disabled={updateMutation.isPending}
                     >
                       Reject
                     </Button>
                     <Button 
                       className="bg-green-600 hover:bg-green-700 text-white border-0"
                       onClick={() => handleVerify(req.id, 'approved')}
+                      disabled={updateMutation.isPending}
                     >
                       Verify Student
                     </Button>

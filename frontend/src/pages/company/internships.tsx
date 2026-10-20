@@ -5,33 +5,18 @@ import { Link } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Users, MapPin, Calendar, Clock, Edit, MoreVertical, Briefcase } from 'lucide-react';
+import { Plus, Users, MapPin, Calendar, Clock, Edit, MoreVertical, Briefcase, Loader2 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 export default function CompanyInternships() {
   const { auth } = useAuth();
   const companyId = auth?.user?.id || 0;
 
-  const { data: internships, isLoading } = useGetCompanyInternships(companyId, {
+  const { data: internships, isLoading, isError, error, refetch } = useGetCompanyInternships(companyId, {
     query: { enabled: !!companyId, queryKey: ['company-internships', companyId] }
   });
 
-  const mockInternships = [
-    {
-      id: 1, title: "Frontend Engineering Intern", location: "Remote", type: "Summer 2024", 
-      status: "open", applicantsCount: 42, createdAt: new Date().toISOString(), skills: ["React", "TypeScript"]
-    },
-    {
-      id: 2, title: "Backend Developer Intern", location: "New York, NY", type: "Fall 2024", 
-      status: "open", applicantsCount: 15, createdAt: new Date().toISOString(), skills: ["Go", "PostgreSQL"]
-    },
-    {
-      id: 3, title: "Data Science Intern", location: "Remote", type: "Spring 2024", 
-      status: "closed", applicantsCount: 89, createdAt: new Date(Date.now() - 30*86400000).toISOString(), skills: ["Python", "PyTorch"]
-    }
-  ];
-
-  const data = internships || mockInternships;
+  const data = internships ?? [];
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -45,8 +30,20 @@ export default function CompanyInternships() {
         </Button>
       </div>
 
-      <div className="grid gap-4">
-        {data.map((job: any) => (
+      {isLoading ? (
+        <div className="flex justify-center p-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      ) : isError ? (
+        <div className="space-y-4 p-8 text-center">
+          <h2 className="text-xl font-semibold">Could not load your internship postings</h2>
+          <p className="text-muted-foreground">
+            {error instanceof Error ? error.message : "Please try again."}
+          </p>
+          <Button variant="outline" onClick={() => void refetch()}>Try again</Button>
+        </div>
+      ) : <div className="grid gap-4">
+        {data.map((job) => (
           <Card key={job.id} className={`overflow-hidden ${job.status === 'closed' ? 'opacity-75 bg-muted/30' : ''}`}>
             <CardContent className="p-0">
               <div className="flex flex-col sm:flex-row">
@@ -81,7 +78,7 @@ export default function CompanyInternships() {
                       <Users className="h-5 w-5" />
                     </div>
                     <div>
-                      <div className="text-2xl font-bold">{job.applicantsCount || 0}</div>
+                      <div className="text-2xl font-bold">{job.applicantsCount ?? 0}</div>
                       <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Applicants</div>
                     </div>
                   </div>
@@ -116,7 +113,7 @@ export default function CompanyInternships() {
             </Button>
           </div>
         )}
-      </div>
+      </div>}
     </div>
   );
 }

@@ -1,0 +1,94 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Check existing repository changes",
+			"type": "shell",
+			"command": "git",
+			"args": [
+				"status",
+				"--short"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Find AI source references",
+			"type": "shell",
+			"command": "git",
+			"args": [
+				"grep",
+				"-il",
+				"-E",
+				"AI|Gemini|OpenAI|OpenAI|assistant|artificial intelligence|LLM|model-generated",
+				"--",
+				"."
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "List project manifests and env files",
+			"type": "shell",
+			"command": "git",
+			"args": [
+				"ls-files",
+				"*package.json",
+				"*pnpm-workspace.yaml",
+				"*.env*",
+				"*openapi*",
+				"*drizzle*",
+				"*README*",
+				"*AGENTS.md",
+				"*instructions.md"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "List backend server files",
+			"type": "shell",
+			"command": "git",
+			"args": [
+				"ls-files",
+				"backend/server"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "List all tracked source files",
+			"type": "shell",
+			"command": "git",
+			"args": [
+				"ls-files",
+				"frontend/src",
+				"backend"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Find direct model references",
+			"type": "shell",
+			"command": "git",
+			"args": [
+				"grep",
+				"-n",
+				"-I",
+				"-i",
+				"-E",
+				"gemini|openai|assistant|generatecontent|api/ai|artificial intelligence|ai-based|model-generated|assessment draft",
+				"--",
+				"backend",
+				"frontend",
+				"package.json",
+				"pnpm-workspace.yaml",
+				".env.example",
+				"frontend/.env.example"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		}
+	]
+}

@@ -1,6 +1,8 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
   check,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -10,7 +12,6 @@ import {
   primaryKey,
   real,
   serial,
-  sql,
   text,
   timestamp,
   uniqueIndex,
@@ -51,6 +52,7 @@ export const assessmentQuestionTypeEnum = pgEnum("assessment_question_type", [
 ]);
 export const assessmentAttemptStatusEnum = pgEnum("assessment_attempt_status", [
   "in_progress",
+  "pending_review",
   "submitted",
   "expired",
 ]);
@@ -92,6 +94,16 @@ export const internshipTalentRequirementsTable = pgTable("internship_talent_requ
   roleId: integer("role_id").references(() => itRolesTable.id, { onDelete: "set null" }),
   requiredCoursework: text("required_coursework").array().notNull().default([]),
   requiredFieldsOfStudy: text("required_fields_of_study").array().notNull().default([]),
+  matchWeights: jsonb("match_weights").notNull().default({
+    assessment: 0.45,
+    skills: 0.3,
+    projectsExperience: 0.15,
+    education: 0.1,
+  }),
+  skillWeights: jsonb("skill_weights").notNull().default({}),
+  minimumMatchScore: real("minimum_match_score"),
+  minimumAssessmentScore: real("minimum_assessment_score"),
+  requireVerifiedStudent: boolean("require_verified_student").notNull().default(false),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -205,7 +217,6 @@ export const assessmentAttemptsTable = pgTable(
     submittedAt: timestamp("submitted_at", { withTimezone: true }),
     overallScore: real("overall_score"),
     resultExplanation: text("result_explanation"),
-    explanationModel: text("explanation_model"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
@@ -232,6 +243,8 @@ export const assessmentAnswersTable = pgTable(
     pointsEarned: numeric("points_earned", { precision: 8, scale: 2 }),
     deterministic: boolean("deterministic").notNull().default(true),
     evaluatorNotes: text("evaluator_notes"),
+    evaluatedByUserId: integer("evaluated_by_user_id").references(() => usersTable.id, { onDelete: "set null" }),
+    evaluatedAt: timestamp("evaluated_at", { withTimezone: true }),
     answeredAt: timestamp("answered_at", { withTimezone: true }),
   },
   (table) => [
@@ -305,7 +318,14 @@ export const companyAssessmentConsentsTable = pgTable(
     grantedAt: timestamp("granted_at", { withTimezone: true }).notNull().defaultNow(),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
   },
-  (table) => [uniqueIndex("company_assessment_consents_student_application_uq").on(table.studentId, table.applicationId)],
+  (table) => [
+    uniqueIndex("company_assessment_consents_student_application_uq").on(table.studentId, table.applicationId),
+    foreignKey({
+      columns: [table.applicationId, table.studentId],
+      foreignColumns: [applicationsTable.id, applicationsTable.studentId],
+      name: "company_assessment_consents_application_student_fk",
+    }).onDelete("cascade"),
+  ],
 );
 
 export const studentDataAccessAuditTable = pgTable(

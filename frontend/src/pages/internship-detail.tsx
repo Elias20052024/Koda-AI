@@ -24,8 +24,10 @@ export default function InternshipDetailPage() {
   // Match score hook (only enabled if student is logged in)
   const isStudent = auth?.user?.role === 'student';
   const { data: matchResult } = useGetMatchScore(id, {
+    studentId: auth?.user?.id || 0,
+  }, {
     query: { enabled: isStudent, queryKey: ['match', id, auth?.user?.id] },
-  }, { studentId: auth?.user?.id || 0 });
+  });
 
   const match = matchResult;
 

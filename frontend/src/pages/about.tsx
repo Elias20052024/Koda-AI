@@ -12,7 +12,6 @@ import {
   GraduationCap,
   Building2,
   BookOpen,
-  Brain,
   Zap,
   Target,
   Users,
@@ -63,7 +62,7 @@ export default function AboutPage() {
     {
       question: 'What is Koda AI?',
       answer:
-        'Koda AI is an AI-powered internship platform for IT students, companies, and universities. We focus on skill-based matching and secure verified internship placement workflows.',
+        'Koda AI is an internship platform for IT students, companies, and universities, with transparent rule-based matching and verified placement workflows.',
     },
     {
       question: 'Who can use Koda AI?',
@@ -71,14 +70,14 @@ export default function AboutPage() {
         'Students, companies, and universities can all benefit. Students discover internships, companies recruit qualified interns, and universities support verified placements.',
     },
     {
-      question: 'How does AI matching work?',
+      question: 'How are internships matched?',
       answer:
-        'Our matching engine evaluates technical skills, project experience, and assessment results to recommend internships that align with student strengths and employer requirements.',
+        'Configurable rules compare technical skills, project experience, assessment results, and eligibility criteria with company requirements. Match results include a score breakdown and evidence coverage.',
     },
     {
       question: 'Can companies join?',
       answer:
-        'Yes. Companies can create profiles, post internship openings, and receive AI-suggested student matches through the platform.',
+        'Yes. Companies can create profiles, post internship openings, set role requirements, and review applicants with transparent matching evidence.',
     },
     {
       question: 'How do universities participate?',
@@ -110,13 +109,13 @@ export default function AboutPage() {
             >
               <span className="inline-flex items-center rounded-full border border-white/10 bg-gradient-to-r from-[#33D6D1]/10 to-[#7A4DFF]/10 px-4 py-2 text-sm font-medium text-[#33D6D1] mb-6">
                 <Sparkles className="mr-2 h-4 w-4" />
-                AI-driven internships for IT talent
+                Skills-based internships for IT talent
               </span>
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-tight text-foreground">
                 Building the Future of IT Internship Recruitment
               </h1>
               <p className="mt-6 max-w-2xl text-lg text-muted-foreground leading-relaxed">
-                Koda AI is an AI-powered internship platform designed to help IT students connect with the right internship opportunities while enabling companies to discover qualified talent through intelligent skill-based matching.
+                Koda AI helps IT students find internships and enables companies to discover candidates through configurable skill-based matching.
               </p>
 
               <div className="mt-10 flex flex-col sm:flex-row items-start gap-4">
@@ -158,7 +157,7 @@ export default function AboutPage() {
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-4 rounded-3xl border border-white/10 bg-white/5 p-5">
                       <div className="flex h-14 w-14 items-center justify-center rounded-3xl bg-[#33D6D1]/15 text-[#33D6D1]">
-                        <Brain className="h-6 w-6" />
+                        <Target className="h-6 w-6" />
                       </div>
                       <div>
                         <p className="text-sm text-[#cbd5e1]">Smart matching</p>
@@ -198,7 +197,7 @@ export default function AboutPage() {
                 Many talented IT students struggle to find internships because traditional recruitment relies heavily on resumes instead of practical skills. At the same time, companies spend significant time reviewing applications without an efficient way to identify the most suitable candidates.
               </p>
               <p className="text-lg leading-8 text-muted-foreground">
-                Koda AI was created to bridge this gap by using intelligent skill-based matching and technical assessments to connect students with internship opportunities more effectively.
+                Koda AI was created to bridge this gap with transparent matching rules and reviewed technical assessments that connect students with internship opportunities.
               </p>
             </motion.div>
 
@@ -224,7 +223,7 @@ export default function AboutPage() {
               <span className="text-sm font-semibold uppercase tracking-[0.3em] text-[#33D6D1]">Our Mission</span>
               <h3 className="mt-4 text-3xl font-bold">Our Mission</h3>
               <p className="mt-4 text-lg leading-8 text-muted-foreground">
-                To simplify internship recruitment by connecting IT students, companies, and universities through an intelligent platform that promotes skill-based opportunities and supports career development.
+                To simplify internship recruitment by connecting IT students, companies, and universities through a platform that promotes skills-based opportunities and supports career development.
               </p>
             </motion.div>
             <motion.div variants={item} initial="hidden" whileInView="show" viewport={{ once: true }} className="rounded-[1.75rem] border border-border/70 bg-card/95 p-8 shadow-lg shadow-[#0b132b]/5">
@@ -315,7 +314,7 @@ export default function AboutPage() {
               },
               {
                 title: 'Companies',
-                description: 'Recruit qualified IT interns efficiently using intelligent matching.',
+                description: 'Recruit IT interns efficiently using configurable role and skill requirements.',
                 icon: Building2,
                 accent: 'from-[#35B7FF] to-[#7A4DFF]',
               },
@@ -356,7 +355,7 @@ export default function AboutPage() {
             className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4"
           >
             {[
-              { title: 'AI-powered internship matching', icon: Brain },
+              { title: 'Configurable internship matching', icon: Target },
               { title: 'Technical skill assessments', icon: ListChecks },
               { title: 'Verified student profiles', icon: ShieldCheck },
               { title: 'Centralized internship management', icon: Layers },
@@ -432,7 +431,7 @@ export default function AboutPage() {
                 <span className="text-sm font-semibold uppercase tracking-[0.3em] text-[#35B7FF]">Join the future</span>
                 <h2 className="mt-4 text-4xl font-bold">Join the Future of Internship Recruitment</h2>
                 <p className="mt-6 max-w-2xl text-lg leading-8 text-muted-foreground">
-                  Whether you are a student looking for opportunities, a company searching for talented interns, or a university supporting student success, Koda AI is designed to connect you through one intelligent platform.
+                  Whether you are a student looking for opportunities, a company searching for talented interns, or a university supporting student success, Koda AI connects you through one practical platform.
                 </p>
               </motion.div>
               <motion.div initial="hidden" whileInView="show" viewport={{ once: true }} variants={item} className="flex flex-col gap-4 sm:flex-row sm:justify-end">

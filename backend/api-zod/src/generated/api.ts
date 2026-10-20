@@ -12,7 +12,8 @@ import * as zod from 'zod';
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({
-  "status": zod.string()
+  "ok": zod.boolean(),
+  "service": zod.string()
 })
 
 
@@ -23,7 +24,7 @@ export const RegisterBody = zod.object({
   "email": zod.string(),
   "password": zod.string(),
   "name": zod.string(),
-  "role": zod.enum(['student', 'company', 'university', 'admin'])
+  "role": zod.enum(['student', 'company', 'university']).optional()
 })
 
 export const RegisterResponse = zod.object({
@@ -61,6 +62,31 @@ export const LoginResponse = zod.object({
 
 
 /**
+ * @summary Authenticate using a verified social-provider session
+ */
+export const socialLoginBodyAccessTokenMax = 8192;
+
+
+
+export const SocialLoginBody = zod.object({
+  "accessToken": zod.string().max(socialLoginBodyAccessTokenMax),
+  "role": zod.enum(['student', 'company', 'university']).optional()
+})
+
+export const SocialLoginResponse = zod.object({
+  "token": zod.string(),
+  "user": zod.object({
+  "id": zod.number(),
+  "email": zod.string(),
+  "name": zod.string(),
+  "role": zod.enum(['student', 'company', 'university', 'admin']),
+  "avatarUrl": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+})
+
+
+/**
  * @summary Get current user
  */
 export const GetMeResponse = zod.object({
@@ -74,82 +100,8 @@ export const GetMeResponse = zod.object({
 
 
 /**
- * @summary Get student profile
- */
-export const GetStudentParams = zod.object({
-  "id": zod.coerce.number()
-})
-
-export const GetStudentResponse = zod.object({
-  "id": zod.number(),
-  "userId": zod.number(),
-  "name": zod.string(),
-  "email": zod.string(),
-  "university": zod.string().nullish(),
-  "gpa": zod.number().nullish(),
-  "bio": zod.string().nullish(),
-  "resumeUrl": zod.string().nullish(),
-  "skills": zod.array(zod.string()).optional(),
-  "verified": zod.boolean().optional(),
-  "avatarUrl": zod.string().nullish()
-})
-
-
-/**
- * @summary Update student profile
- */
-export const UpdateStudentParams = zod.object({
-  "id": zod.coerce.number()
-})
-
-export const UpdateStudentBody = zod.object({
-  "university": zod.string().optional(),
-  "gpa": zod.number().optional(),
-  "bio": zod.string().optional(),
-  "resumeUrl": zod.string().optional(),
-  "skills": zod.array(zod.string()).optional(),
-  "avatarUrl": zod.string().optional()
-})
-
-export const UpdateStudentResponse = zod.object({
-  "id": zod.number(),
-  "userId": zod.number(),
-  "name": zod.string(),
-  "email": zod.string(),
-  "university": zod.string().nullish(),
-  "gpa": zod.number().nullish(),
-  "bio": zod.string().nullish(),
-  "resumeUrl": zod.string().nullish(),
-  "skills": zod.array(zod.string()).optional(),
-  "verified": zod.boolean().optional(),
-  "avatarUrl": zod.string().nullish()
-})
-
-
-/**
- * @summary Get student's applications
- */
-export const GetStudentApplicationsParams = zod.object({
-  "id": zod.coerce.number()
-})
-
-export const GetStudentApplicationsResponseItem = zod.object({
-  "id": zod.number(),
-  "studentId": zod.number(),
-  "internshipId": zod.number(),
-  "internshipTitle": zod.string().optional(),
-  "companyName": zod.string().optional(),
-  "companyLogo": zod.string().nullish(),
-  "coverLetter": zod.string().nullish(),
-  "matchScore": zod.number().nullish(),
-  "status": zod.enum(['pending', 'accepted', 'rejected', 'withdrawn']),
-  "createdAt": zod.string()
-})
-export const GetStudentApplicationsResponse = zod.array(GetStudentApplicationsResponseItem)
-
-
-/**
- * @summary Get AI-recommended internships for student
+ * The path ID is the authenticated users.id; the server derives students.id from the session.
+ * @summary Get recommendations for an authenticated student
  */
 export const GetRecommendedInternshipsParams = zod.object({
   "id": zod.coerce.number()
@@ -171,67 +123,771 @@ export const GetRecommendedInternshipsResponseItem = zod.object({
   "deadline": zod.string().nullish(),
   "applicantsCount": zod.number().optional(),
   "createdAt": zod.string(),
-  "matchScore": zod.number(),
-  "matchExplanation": zod.string().optional()
+  "matchScore": zod.number().nullable(),
+  "matchExplanation": zod.string().optional(),
+  "eligible": zod.boolean().optional(),
+  "eligibilityReasons": zod.array(zod.string()).optional(),
+  "evidenceCoverage": zod.number().optional(),
+  "weights": zod.object({
+  "assessment": zod.number().optional(),
+  "skills": zod.number().optional(),
+  "projectsExperience": zod.number().optional(),
+  "education": zod.number().optional()
+}).optional(),
+  "breakdown": zod.object({
+
+}).passthrough().optional()
 })
 export const GetRecommendedInternshipsResponse = zod.array(GetRecommendedInternshipsResponseItem)
 
 
 /**
- * @summary Get company profile
+ * @summary Get authenticated student's transparent internship matches
  */
-export const GetCompanyParams = zod.object({
-  "id": zod.coerce.number()
-})
-
-export const GetCompanyResponse = zod.object({
+export const GetTalentRecommendationsResponseItem = zod.object({
   "id": zod.number(),
-  "userId": zod.number(),
-  "name": zod.string(),
-  "email": zod.string(),
-  "companyName": zod.string().nullish(),
-  "industry": zod.string().nullish(),
-  "description": zod.string().nullish(),
-  "website": zod.string().nullish(),
-  "logoUrl": zod.string().nullish(),
-  "verified": zod.boolean().optional()
-})
-
-
-/**
- * @summary Update company profile
- */
-export const UpdateCompanyParams = zod.object({
-  "id": zod.coerce.number()
-})
-
-export const UpdateCompanyBody = zod.object({
+  "companyId": zod.number(),
   "companyName": zod.string().optional(),
-  "industry": zod.string().optional(),
-  "description": zod.string().optional(),
-  "website": zod.string().optional(),
-  "logoUrl": zod.string().optional()
-})
+  "companyLogo": zod.string().nullish(),
+  "title": zod.string(),
+  "description": zod.string(),
+  "location": zod.string().nullish(),
+  "type": zod.string().nullish(),
+  "duration": zod.string().nullish(),
+  "skills": zod.array(zod.string()).optional(),
+  "salary": zod.string().nullish(),
+  "status": zod.enum(['open', 'closed', 'draft']),
+  "deadline": zod.string().nullish(),
+  "applicantsCount": zod.number().optional(),
+  "createdAt": zod.string(),
+  "matchScore": zod.number().nullable(),
+  "matchExplanation": zod.string().optional(),
+  "eligible": zod.boolean().optional(),
+  "eligibilityReasons": zod.array(zod.string()).optional(),
+  "evidenceCoverage": zod.number().optional(),
+  "weights": zod.object({
+  "assessment": zod.number().optional(),
+  "skills": zod.number().optional(),
+  "projectsExperience": zod.number().optional(),
+  "education": zod.number().optional()
+}).optional(),
+  "breakdown": zod.object({
 
-export const UpdateCompanyResponse = zod.object({
+}).passthrough().optional()
+})
+export const GetTalentRecommendationsResponse = zod.array(GetTalentRecommendationsResponseItem)
+
+
+/**
+ * @summary Recalculate and persist the authenticated student's match snapshot
+ */
+export const RefreshTalentRecommendationsResponseItem = zod.object({
   "id": zod.number(),
-  "userId": zod.number(),
+  "companyId": zod.number(),
+  "companyName": zod.string().optional(),
+  "companyLogo": zod.string().nullish(),
+  "title": zod.string(),
+  "description": zod.string(),
+  "location": zod.string().nullish(),
+  "type": zod.string().nullish(),
+  "duration": zod.string().nullish(),
+  "skills": zod.array(zod.string()).optional(),
+  "salary": zod.string().nullish(),
+  "status": zod.enum(['open', 'closed', 'draft']),
+  "deadline": zod.string().nullish(),
+  "applicantsCount": zod.number().optional(),
+  "createdAt": zod.string(),
+  "matchScore": zod.number().nullable(),
+  "matchExplanation": zod.string().optional(),
+  "eligible": zod.boolean().optional(),
+  "eligibilityReasons": zod.array(zod.string()).optional(),
+  "evidenceCoverage": zod.number().optional(),
+  "weights": zod.object({
+  "assessment": zod.number().optional(),
+  "skills": zod.number().optional(),
+  "projectsExperience": zod.number().optional(),
+  "education": zod.number().optional()
+}).optional(),
+  "breakdown": zod.object({
+
+}).passthrough().optional()
+})
+export const RefreshTalentRecommendationsResponse = zod.array(RefreshTalentRecommendationsResponseItem)
+
+
+/**
+ * @summary Get the authenticated student's matching evidence
+ */
+export const GetTalentProfileResponse = zod.object({
+  "university": zod.string().nullable(),
+  "gpa": zod.number().nullable(),
+  "bio": zod.string().nullable(),
+  "resumeUrl": zod.string().nullable(),
+  "verified": zod.boolean(),
+  "skills": zod.array(zod.string()),
+  "projects": zod.array(zod.object({
+  "id": zod.number(),
   "name": zod.string(),
-  "email": zod.string(),
-  "companyName": zod.string().nullish(),
-  "industry": zod.string().nullish(),
-  "description": zod.string().nullish(),
-  "website": zod.string().nullish(),
-  "logoUrl": zod.string().nullish(),
-  "verified": zod.boolean().optional()
+  "description": zod.string(),
+  "skills": zod.array(zod.string()),
+  "url": zod.string().nullable(),
+  "startedAt": zod.coerce.date().nullable(),
+  "completedAt": zod.coerce.date().nullable()
+})),
+  "experience": zod.array(zod.object({
+  "id": zod.number(),
+  "organization": zod.string(),
+  "title": zod.string(),
+  "description": zod.string(),
+  "skills": zod.array(zod.string()),
+  "startedAt": zod.coerce.date().nullable(),
+  "endedAt": zod.coerce.date().nullable()
+})),
+  "education": zod.array(zod.object({
+  "id": zod.number(),
+  "institution": zod.string(),
+  "degree": zod.string().nullable(),
+  "fieldOfStudy": zod.string().nullable(),
+  "coursework": zod.array(zod.string()),
+  "startDate": zod.coerce.date().nullable(),
+  "endDate": zod.coerce.date().nullable()
+}))
 })
 
 
 /**
- * @summary Get company's internships
+ * @summary Update the authenticated student's profile fields and skills
+ */
+export const updateTalentSkillsBodyGpaMin = 0;
+export const updateTalentSkillsBodyGpaMax = 5;
+
+export const updateTalentSkillsBodyBioMax = 500;
+
+export const updateTalentSkillsBodyResumeUrlMax = 2048;
+
+
+export const updateTalentSkillsBodyResumeUrlRegExp = new RegExp('^https?:/');
+export const updateTalentSkillsBodySkillsMax = 100;
+
+
+
+export const UpdateTalentSkillsBody = zod.object({
+  "university": zod.string().nullish(),
+  "gpa": zod.number().min(updateTalentSkillsBodyGpaMin).max(updateTalentSkillsBodyGpaMax).nullish(),
+  "bio": zod.string().max(updateTalentSkillsBodyBioMax).nullish(),
+  "resumeUrl": zod.string().url().max(updateTalentSkillsBodyResumeUrlMax).regex(updateTalentSkillsBodyResumeUrlRegExp).nullish(),
+  "skills": zod.array(zod.string()).max(updateTalentSkillsBodySkillsMax)
+})
+
+export const updateTalentSkillsResponseGpaMin = 0;
+export const updateTalentSkillsResponseGpaMax = 5;
+
+export const updateTalentSkillsResponseBioMax = 500;
+
+export const updateTalentSkillsResponseResumeUrlMax = 2048;
+
+
+export const updateTalentSkillsResponseResumeUrlRegExp = new RegExp('^https?:/');
+export const updateTalentSkillsResponseSkillsMax = 100;
+
+
+
+export const UpdateTalentSkillsResponse = zod.object({
+  "university": zod.string().nullish(),
+  "gpa": zod.number().min(updateTalentSkillsResponseGpaMin).max(updateTalentSkillsResponseGpaMax).nullish(),
+  "bio": zod.string().max(updateTalentSkillsResponseBioMax).nullish(),
+  "resumeUrl": zod.string().url().max(updateTalentSkillsResponseResumeUrlMax).regex(updateTalentSkillsResponseResumeUrlRegExp).nullish(),
+  "skills": zod.array(zod.string()).max(updateTalentSkillsResponseSkillsMax)
+})
+
+
+/**
+ * @summary Replace the authenticated student's structured evidence
+ */
+export const replaceTalentEvidenceBodyProjectsItemUrlMax = 2048;
+
+
+export const replaceTalentEvidenceBodyProjectsItemUrlRegExp = new RegExp('^https?:/');
+
+
+export const ReplaceTalentEvidenceBody = zod.object({
+  "projects": zod.array(zod.object({
+  "name": zod.string(),
+  "description": zod.string().optional(),
+  "skills": zod.array(zod.string()).optional(),
+  "url": zod.string().max(replaceTalentEvidenceBodyProjectsItemUrlMax).regex(replaceTalentEvidenceBodyProjectsItemUrlRegExp).optional(),
+  "startedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish()
+})),
+  "experience": zod.array(zod.object({
+  "organization": zod.string(),
+  "title": zod.string(),
+  "description": zod.string().optional(),
+  "skills": zod.array(zod.string()).optional(),
+  "startedAt": zod.coerce.date().nullish(),
+  "endedAt": zod.coerce.date().nullish()
+})),
+  "education": zod.array(zod.object({
+  "institution": zod.string(),
+  "degree": zod.string().optional(),
+  "fieldOfStudy": zod.string().optional(),
+  "coursework": zod.array(zod.string()).optional(),
+  "startDate": zod.coerce.date().nullish(),
+  "endDate": zod.coerce.date().nullish()
+}))
+})
+
+export const ReplaceTalentEvidenceResponse = zod.object({
+  "saved": zod.boolean().optional()
+})
+
+
+/**
+ * @summary List the supported IT roles and skills
+ */
+export const GetTalentTaxonomyResponse = zod.object({
+
+}).passthrough()
+
+
+/**
+ * @summary Get matching rules for a company-owned internship
+ */
+export const GetInternshipTalentRequirementsParams = zod.object({
+  "internshipId": zod.coerce.number()
+})
+
+export const getInternshipTalentRequirementsResponseMatchWeightsAssessmentMin = 0;
+export const getInternshipTalentRequirementsResponseMatchWeightsAssessmentMax = 1;
+
+export const getInternshipTalentRequirementsResponseMatchWeightsSkillsMin = 0;
+export const getInternshipTalentRequirementsResponseMatchWeightsSkillsMax = 1;
+
+export const getInternshipTalentRequirementsResponseMatchWeightsProjectsExperienceMin = 0;
+export const getInternshipTalentRequirementsResponseMatchWeightsProjectsExperienceMax = 1;
+
+export const getInternshipTalentRequirementsResponseMatchWeightsEducationMin = 0;
+export const getInternshipTalentRequirementsResponseMatchWeightsEducationMax = 1;
+
+export const getInternshipTalentRequirementsResponseSkillWeightsMinOne = 0;
+export const getInternshipTalentRequirementsResponseSkillWeightsMaxOne = 100;
+
+export const getInternshipTalentRequirementsResponseMinimumMatchScoreMin = 0;
+export const getInternshipTalentRequirementsResponseMinimumMatchScoreMax = 100;
+
+export const getInternshipTalentRequirementsResponseMinimumAssessmentScoreMin = 0;
+export const getInternshipTalentRequirementsResponseMinimumAssessmentScoreMax = 100;
+
+
+
+export const GetInternshipTalentRequirementsResponse = zod.object({
+  "roleId": zod.number().nullish(),
+  "requiredCoursework": zod.array(zod.string()).optional(),
+  "requiredFieldsOfStudy": zod.array(zod.string()).optional(),
+  "matchWeights": zod.object({
+  "assessment": zod.number().min(getInternshipTalentRequirementsResponseMatchWeightsAssessmentMin).max(getInternshipTalentRequirementsResponseMatchWeightsAssessmentMax),
+  "skills": zod.number().min(getInternshipTalentRequirementsResponseMatchWeightsSkillsMin).max(getInternshipTalentRequirementsResponseMatchWeightsSkillsMax),
+  "projectsExperience": zod.number().min(getInternshipTalentRequirementsResponseMatchWeightsProjectsExperienceMin).max(getInternshipTalentRequirementsResponseMatchWeightsProjectsExperienceMax),
+  "education": zod.number().min(getInternshipTalentRequirementsResponseMatchWeightsEducationMin).max(getInternshipTalentRequirementsResponseMatchWeightsEducationMax)
+}).optional(),
+  "skillWeights": zod.record(zod.string(), zod.number().min(getInternshipTalentRequirementsResponseSkillWeightsMinOne).max(getInternshipTalentRequirementsResponseSkillWeightsMaxOne)).optional(),
+  "minimumMatchScore": zod.number().min(getInternshipTalentRequirementsResponseMinimumMatchScoreMin).max(getInternshipTalentRequirementsResponseMinimumMatchScoreMax).nullish(),
+  "minimumAssessmentScore": zod.number().min(getInternshipTalentRequirementsResponseMinimumAssessmentScoreMin).max(getInternshipTalentRequirementsResponseMinimumAssessmentScoreMax).nullish(),
+  "requireVerifiedStudent": zod.boolean().optional()
+})
+
+
+/**
+ * @summary Configure role, skill weights, score weights, and eligibility for a company-owned internship
+ */
+export const UpdateInternshipTalentRequirementsParams = zod.object({
+  "internshipId": zod.coerce.number()
+})
+
+export const updateInternshipTalentRequirementsBodyMatchWeightsAssessmentMin = 0;
+export const updateInternshipTalentRequirementsBodyMatchWeightsAssessmentMax = 1;
+
+export const updateInternshipTalentRequirementsBodyMatchWeightsSkillsMin = 0;
+export const updateInternshipTalentRequirementsBodyMatchWeightsSkillsMax = 1;
+
+export const updateInternshipTalentRequirementsBodyMatchWeightsProjectsExperienceMin = 0;
+export const updateInternshipTalentRequirementsBodyMatchWeightsProjectsExperienceMax = 1;
+
+export const updateInternshipTalentRequirementsBodyMatchWeightsEducationMin = 0;
+export const updateInternshipTalentRequirementsBodyMatchWeightsEducationMax = 1;
+
+export const updateInternshipTalentRequirementsBodySkillWeightsMinOne = 0;
+export const updateInternshipTalentRequirementsBodySkillWeightsMaxOne = 100;
+
+export const updateInternshipTalentRequirementsBodyMinimumMatchScoreMin = 0;
+export const updateInternshipTalentRequirementsBodyMinimumMatchScoreMax = 100;
+
+export const updateInternshipTalentRequirementsBodyMinimumAssessmentScoreMin = 0;
+export const updateInternshipTalentRequirementsBodyMinimumAssessmentScoreMax = 100;
+
+
+
+export const UpdateInternshipTalentRequirementsBody = zod.object({
+  "roleId": zod.number().nullish(),
+  "requiredCoursework": zod.array(zod.string()).optional(),
+  "requiredFieldsOfStudy": zod.array(zod.string()).optional(),
+  "matchWeights": zod.object({
+  "assessment": zod.number().min(updateInternshipTalentRequirementsBodyMatchWeightsAssessmentMin).max(updateInternshipTalentRequirementsBodyMatchWeightsAssessmentMax),
+  "skills": zod.number().min(updateInternshipTalentRequirementsBodyMatchWeightsSkillsMin).max(updateInternshipTalentRequirementsBodyMatchWeightsSkillsMax),
+  "projectsExperience": zod.number().min(updateInternshipTalentRequirementsBodyMatchWeightsProjectsExperienceMin).max(updateInternshipTalentRequirementsBodyMatchWeightsProjectsExperienceMax),
+  "education": zod.number().min(updateInternshipTalentRequirementsBodyMatchWeightsEducationMin).max(updateInternshipTalentRequirementsBodyMatchWeightsEducationMax)
+}).optional(),
+  "skillWeights": zod.record(zod.string(), zod.number().min(updateInternshipTalentRequirementsBodySkillWeightsMinOne).max(updateInternshipTalentRequirementsBodySkillWeightsMaxOne)).optional(),
+  "minimumMatchScore": zod.number().min(updateInternshipTalentRequirementsBodyMinimumMatchScoreMin).max(updateInternshipTalentRequirementsBodyMinimumMatchScoreMax).nullish(),
+  "minimumAssessmentScore": zod.number().min(updateInternshipTalentRequirementsBodyMinimumAssessmentScoreMin).max(updateInternshipTalentRequirementsBodyMinimumAssessmentScoreMax).nullish(),
+  "requireVerifiedStudent": zod.boolean().optional()
+})
+
+export const updateInternshipTalentRequirementsResponseMatchWeightsAssessmentMin = 0;
+export const updateInternshipTalentRequirementsResponseMatchWeightsAssessmentMax = 1;
+
+export const updateInternshipTalentRequirementsResponseMatchWeightsSkillsMin = 0;
+export const updateInternshipTalentRequirementsResponseMatchWeightsSkillsMax = 1;
+
+export const updateInternshipTalentRequirementsResponseMatchWeightsProjectsExperienceMin = 0;
+export const updateInternshipTalentRequirementsResponseMatchWeightsProjectsExperienceMax = 1;
+
+export const updateInternshipTalentRequirementsResponseMatchWeightsEducationMin = 0;
+export const updateInternshipTalentRequirementsResponseMatchWeightsEducationMax = 1;
+
+export const updateInternshipTalentRequirementsResponseSkillWeightsMinOne = 0;
+export const updateInternshipTalentRequirementsResponseSkillWeightsMaxOne = 100;
+
+export const updateInternshipTalentRequirementsResponseMinimumMatchScoreMin = 0;
+export const updateInternshipTalentRequirementsResponseMinimumMatchScoreMax = 100;
+
+export const updateInternshipTalentRequirementsResponseMinimumAssessmentScoreMin = 0;
+export const updateInternshipTalentRequirementsResponseMinimumAssessmentScoreMax = 100;
+
+
+
+export const UpdateInternshipTalentRequirementsResponse = zod.object({
+  "roleId": zod.number().nullish(),
+  "requiredCoursework": zod.array(zod.string()).optional(),
+  "requiredFieldsOfStudy": zod.array(zod.string()).optional(),
+  "matchWeights": zod.object({
+  "assessment": zod.number().min(updateInternshipTalentRequirementsResponseMatchWeightsAssessmentMin).max(updateInternshipTalentRequirementsResponseMatchWeightsAssessmentMax),
+  "skills": zod.number().min(updateInternshipTalentRequirementsResponseMatchWeightsSkillsMin).max(updateInternshipTalentRequirementsResponseMatchWeightsSkillsMax),
+  "projectsExperience": zod.number().min(updateInternshipTalentRequirementsResponseMatchWeightsProjectsExperienceMin).max(updateInternshipTalentRequirementsResponseMatchWeightsProjectsExperienceMax),
+  "education": zod.number().min(updateInternshipTalentRequirementsResponseMatchWeightsEducationMin).max(updateInternshipTalentRequirementsResponseMatchWeightsEducationMax)
+}).optional(),
+  "skillWeights": zod.record(zod.string(), zod.number().min(updateInternshipTalentRequirementsResponseSkillWeightsMinOne).max(updateInternshipTalentRequirementsResponseSkillWeightsMaxOne)).optional(),
+  "minimumMatchScore": zod.number().min(updateInternshipTalentRequirementsResponseMinimumMatchScoreMin).max(updateInternshipTalentRequirementsResponseMinimumMatchScoreMax).nullish(),
+  "minimumAssessmentScore": zod.number().min(updateInternshipTalentRequirementsResponseMinimumAssessmentScoreMin).max(updateInternshipTalentRequirementsResponseMinimumAssessmentScoreMax).nullish(),
+  "requireVerifiedStudent": zod.boolean().optional()
+})
+
+
+/**
+ * @summary Grant a university access to minimum-cohort aggregate analytics
+ */
+export const GrantUniversityAnalyticsConsentBody = zod.object({
+  "universityId": zod.number()
+})
+
+export const GrantUniversityAnalyticsConsentResponse = zod.object({
+
+}).passthrough()
+
+
+/**
+ * @summary Revoke university aggregate analytics consent
+ */
+export const RevokeUniversityAnalyticsConsentParams = zod.object({
+  "universityId": zod.coerce.number()
+})
+
+export const RevokeUniversityAnalyticsConsentResponse = zod.object({
+
+}).passthrough()
+
+
+/**
+ * @summary Share assessment results with the company for an application
+ */
+export const GrantCompanyAssessmentConsentBody = zod.object({
+  "applicationId": zod.number()
+})
+
+export const GrantCompanyAssessmentConsentResponse = zod.object({
+
+}).passthrough()
+
+
+/**
+ * @summary Revoke company assessment sharing consent
+ */
+export const RevokeCompanyAssessmentConsentParams = zod.object({
+  "applicationId": zod.coerce.number()
+})
+
+export const RevokeCompanyAssessmentConsentResponse = zod.object({
+
+}).passthrough()
+
+
+/**
+ * @summary Get consented, verified-student aggregate analytics
+ */
+export const GetUniversityTalentAnalyticsResponse = zod.object({
+
+}).passthrough()
+
+
+/**
+ * @summary List reviewed and published assessments
+ */
+export const ListAvailableAssessmentsResponseItem = zod.object({
+  "id": zod.number(),
+  "templateId": zod.number(),
+  "version": zod.number(),
+  "title": zod.string(),
+  "skill": zod.string(),
+  "difficulty": zod.enum(['beginner', 'intermediate', 'advanced']),
+  "durationMinutes": zod.number(),
+  "questionCount": zod.number()
+})
+export const ListAvailableAssessmentsResponse = zod.array(ListAvailableAssessmentsResponseItem)
+
+
+/**
+ * @summary Create a draft assessment from authored question-bank content
+ */
+export const createAssessmentBodyTitleMax = 200;
+
+export const createAssessmentBodyDurationMinutesMax = 240;
+
+export const createAssessmentBodyQuestionsItemPromptMax = 2000;
+
+export const createAssessmentBodyQuestionsItemOptionsMin = 2;
+export const createAssessmentBodyQuestionsItemOptionsMax = 10;
+
+export const createAssessmentBodyQuestionsItemRubricItemCriterionMax = 500;
+
+export const createAssessmentBodyQuestionsItemRubricItemMaxPointsExclusiveMin = 0;
+
+export const createAssessmentBodyQuestionsItemRubricMax = 20;
+
+export const createAssessmentBodyQuestionsItemMaxPointsMin = 0.01;
+export const createAssessmentBodyQuestionsItemMaxPointsMax = 1000;
+
+export const createAssessmentBodyQuestionsItemExplanationMax = 2000;
+
+export const createAssessmentBodyQuestionsMax = 50;
+
+
+
+export const CreateAssessmentBody = zod.object({
+  "skillId": zod.number(),
+  "roleId": zod.number().nullish(),
+  "title": zod.string().max(createAssessmentBodyTitleMax).optional(),
+  "difficulty": zod.enum(['beginner', 'intermediate', 'advanced']),
+  "durationMinutes": zod.number().min(1).max(createAssessmentBodyDurationMinutesMax).optional(),
+  "questions": zod.array(zod.object({
+  "type": zod.enum(['single_choice', 'multi_select', 'scenario', 'code_reading', 'short_answer']),
+  "prompt": zod.string().max(createAssessmentBodyQuestionsItemPromptMax),
+  "options": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string()
+})).min(createAssessmentBodyQuestionsItemOptionsMin).max(createAssessmentBodyQuestionsItemOptionsMax).optional(),
+  "answerKey": zod.union([zod.string(),zod.array(zod.string()),zod.object({
+
+})]).optional(),
+  "rubric": zod.array(zod.object({
+  "criterion": zod.string().max(createAssessmentBodyQuestionsItemRubricItemCriterionMax),
+  "maxPoints": zod.number().gt(createAssessmentBodyQuestionsItemRubricItemMaxPointsExclusiveMin)
+})).max(createAssessmentBodyQuestionsItemRubricMax).optional(),
+  "maxPoints": zod.number().min(createAssessmentBodyQuestionsItemMaxPointsMin).max(createAssessmentBodyQuestionsItemMaxPointsMax).optional(),
+  "explanation": zod.string().max(createAssessmentBodyQuestionsItemExplanationMax).optional()
+})).min(1).max(createAssessmentBodyQuestionsMax)
+})
+
+export const CreateAssessmentResponse = zod.object({
+
+}).passthrough()
+
+
+/**
+ * @summary Get assessment content and answer keys for an administrator to review
+ */
+export const GetAssessmentForReviewParams = zod.object({
+  "versionId": zod.coerce.number()
+})
+
+export const GetAssessmentForReviewResponse = zod.object({
+
+}).passthrough()
+
+
+/**
+ * @summary Grade a submitted subjective answer against its rubric
+ */
+export const GradeSubjectiveAssessmentAnswerParams = zod.object({
+  "attemptId": zod.coerce.number(),
+  "questionId": zod.coerce.number()
+})
+
+export const gradeSubjectiveAssessmentAnswerBodyCriteriaItemPointsMin = 0;
+
+export const gradeSubjectiveAssessmentAnswerBodyCriteriaMax = 20;
+
+export const gradeSubjectiveAssessmentAnswerBodyNotesMax = 2000;
+
+
+
+export const GradeSubjectiveAssessmentAnswerBody = zod.object({
+  "criteria": zod.array(zod.object({
+  "criterion": zod.string(),
+  "points": zod.number().min(gradeSubjectiveAssessmentAnswerBodyCriteriaItemPointsMin)
+})).min(1).max(gradeSubjectiveAssessmentAnswerBodyCriteriaMax),
+  "notes": zod.string().max(gradeSubjectiveAssessmentAnswerBodyNotesMax).optional()
+})
+
+export const GradeSubjectiveAssessmentAnswerResponse = zod.object({
+
+}).passthrough()
+
+
+/**
+ * @summary List subjective assessment answers awaiting rubric-based human review
+ */
+export const ListAssessmentsPendingReviewResponseItem = zod.object({
+  "attemptId": zod.number().optional(),
+  "studentId": zod.number().optional(),
+  "assessmentTitle": zod.string().optional(),
+  "submittedAt": zod.string().nullish(),
+  "questions": zod.array(zod.object({
+
+}).passthrough()).optional()
+})
+export const ListAssessmentsPendingReviewResponse = zod.array(ListAssessmentsPendingReviewResponseItem)
+
+
+/**
+ * @summary Edit an unreviewed assessment question
+ */
+export const EditAssessmentQuestionParams = zod.object({
+  "questionId": zod.coerce.number()
+})
+
+export const editAssessmentQuestionBodyPromptMax = 2000;
+
+export const editAssessmentQuestionBodyOptionsMin = 2;
+export const editAssessmentQuestionBodyOptionsMax = 10;
+
+export const editAssessmentQuestionBodyRubricItemCriterionMax = 500;
+
+export const editAssessmentQuestionBodyRubricItemMaxPointsExclusiveMin = 0;
+
+export const editAssessmentQuestionBodyRubricMax = 20;
+
+export const editAssessmentQuestionBodyMaxPointsMin = 0.01;
+export const editAssessmentQuestionBodyMaxPointsMax = 1000;
+
+export const editAssessmentQuestionBodyExplanationMax = 2000;
+
+
+
+export const EditAssessmentQuestionBody = zod.object({
+  "type": zod.enum(['single_choice', 'multi_select', 'scenario', 'code_reading', 'short_answer']),
+  "prompt": zod.string().max(editAssessmentQuestionBodyPromptMax),
+  "options": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string()
+})).min(editAssessmentQuestionBodyOptionsMin).max(editAssessmentQuestionBodyOptionsMax).optional(),
+  "answerKey": zod.union([zod.string(),zod.array(zod.string()),zod.object({
+
+})]).optional(),
+  "rubric": zod.array(zod.object({
+  "criterion": zod.string().max(editAssessmentQuestionBodyRubricItemCriterionMax),
+  "maxPoints": zod.number().gt(editAssessmentQuestionBodyRubricItemMaxPointsExclusiveMin)
+})).max(editAssessmentQuestionBodyRubricMax).optional(),
+  "maxPoints": zod.number().min(editAssessmentQuestionBodyMaxPointsMin).max(editAssessmentQuestionBodyMaxPointsMax).optional(),
+  "explanation": zod.string().max(editAssessmentQuestionBodyExplanationMax).optional()
+})
+
+export const EditAssessmentQuestionResponse = zod.object({
+
+}).passthrough()
+
+
+/**
+ * @summary Mark a question as human-reviewed
+ */
+export const ReviewAssessmentQuestionParams = zod.object({
+  "questionId": zod.coerce.number()
+})
+
+export const ReviewAssessmentQuestionResponse = zod.object({
+
+}).passthrough()
+
+
+/**
+ * @summary Publish an assessment only after every question is reviewed
+ */
+export const PublishReviewedAssessmentParams = zod.object({
+  "versionId": zod.coerce.number()
+})
+
+export const PublishReviewedAssessmentResponse = zod.object({
+
+}).passthrough()
+
+
+/**
+ * @summary Get the authenticated student's assessment history and skill scores
+ */
+export const GetAssessmentHistoryResponseItem = zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "status": zod.enum(['in_progress', 'pending_review', 'submitted', 'expired']),
+  "startedAt": zod.string(),
+  "submittedAt": zod.string().nullish(),
+  "overallScore": zod.number().nullish(),
+  "skillScores": zod.array(zod.object({
+  "skill": zod.string().optional(),
+  "score": zod.number().optional()
+}))
+})
+export const GetAssessmentHistoryResponse = zod.array(GetAssessmentHistoryResponseItem)
+
+
+/**
+ * @summary Start a timed assessment
+ */
+export const StartAssessmentAttemptParams = zod.object({
+  "versionId": zod.coerce.number()
+})
+
+export const StartAssessmentAttemptResponse = zod.object({
+  "id": zod.number(),
+  "status": zod.enum(['in_progress', 'pending_review', 'submitted', 'expired']),
+  "startedAt": zod.string(),
+  "expiresAt": zod.string(),
+  "submittedAt": zod.string().nullish(),
+  "overallScore": zod.number().nullish(),
+  "resultExplanation": zod.string().nullish(),
+  "questions": zod.array(zod.object({
+  "id": zod.number(),
+  "position": zod.number(),
+  "skillId": zod.number(),
+  "type": zod.string(),
+  "difficulty": zod.string(),
+  "prompt": zod.string(),
+  "options": zod.array(zod.object({
+
+}).passthrough()).nullable(),
+  "answer": zod.union([zod.string(),zod.array(zod.string()),zod.null()]),
+  "earnedPoints": zod.number().nullish(),
+  "explanation": zod.string().nullish(),
+  "rubric": zod.array(zod.object({
+  "criterion": zod.string().optional(),
+  "maxPoints": zod.number().optional()
+})).optional()
+}))
+})
+
+
+/**
+ * @summary Get the authenticated student's assessment attempt
+ */
+export const GetAssessmentAttemptParams = zod.object({
+  "attemptId": zod.coerce.number()
+})
+
+export const GetAssessmentAttemptResponse = zod.object({
+  "id": zod.number(),
+  "status": zod.enum(['in_progress', 'pending_review', 'submitted', 'expired']),
+  "startedAt": zod.string(),
+  "expiresAt": zod.string(),
+  "submittedAt": zod.string().nullish(),
+  "overallScore": zod.number().nullish(),
+  "resultExplanation": zod.string().nullish(),
+  "questions": zod.array(zod.object({
+  "id": zod.number(),
+  "position": zod.number(),
+  "skillId": zod.number(),
+  "type": zod.string(),
+  "difficulty": zod.string(),
+  "prompt": zod.string(),
+  "options": zod.array(zod.object({
+
+}).passthrough()).nullable(),
+  "answer": zod.union([zod.string(),zod.array(zod.string()),zod.null()]),
+  "earnedPoints": zod.number().nullish(),
+  "explanation": zod.string().nullish(),
+  "rubric": zod.array(zod.object({
+  "criterion": zod.string().optional(),
+  "maxPoints": zod.number().optional()
+})).optional()
+}))
+})
+
+
+/**
+ * @summary Save one validated assessment answer
+ */
+export const SaveAssessmentAnswerParams = zod.object({
+  "attemptId": zod.coerce.number(),
+  "questionId": zod.coerce.number()
+})
+
+export const SaveAssessmentAnswerBody = zod.object({
+  "answer": zod.unknown()
+})
+
+export const SaveAssessmentAnswerResponse = zod.object({
+
+}).passthrough()
+
+
+/**
+ * @summary Submit and deterministically score an assessment
+ */
+export const SubmitAssessmentAttemptParams = zod.object({
+  "attemptId": zod.coerce.number()
+})
+
+export const SubmitAssessmentAttemptResponse = zod.object({
+  "id": zod.number(),
+  "status": zod.enum(['in_progress', 'pending_review', 'submitted', 'expired']),
+  "startedAt": zod.string(),
+  "expiresAt": zod.string(),
+  "submittedAt": zod.string().nullish(),
+  "overallScore": zod.number().nullish(),
+  "resultExplanation": zod.string().nullish(),
+  "questions": zod.array(zod.object({
+  "id": zod.number(),
+  "position": zod.number(),
+  "skillId": zod.number(),
+  "type": zod.string(),
+  "difficulty": zod.string(),
+  "prompt": zod.string(),
+  "options": zod.array(zod.object({
+
+}).passthrough()).nullable(),
+  "answer": zod.union([zod.string(),zod.array(zod.string()),zod.null()]),
+  "earnedPoints": zod.number().nullish(),
+  "explanation": zod.string().nullish(),
+  "rubric": zod.array(zod.object({
+  "criterion": zod.string().optional(),
+  "maxPoints": zod.number().optional()
+})).optional()
+}))
+})
+
+
+/**
+ * @summary Get internships for the authenticated company user
  */
 export const GetCompanyInternshipsParams = zod.object({
-  "id": zod.coerce.number()
+  "id": zod.coerce.number().describe('Authenticated users.id for the company; companies.id is resolved by the server.')
 })
 
 export const GetCompanyInternshipsResponseItem = zod.object({
@@ -252,47 +908,6 @@ export const GetCompanyInternshipsResponseItem = zod.object({
   "createdAt": zod.string()
 })
 export const GetCompanyInternshipsResponse = zod.array(GetCompanyInternshipsResponseItem)
-
-
-/**
- * @summary Get university profile
- */
-export const GetUniversityParams = zod.object({
-  "id": zod.coerce.number()
-})
-
-export const GetUniversityResponse = zod.object({
-  "id": zod.number(),
-  "userId": zod.number(),
-  "name": zod.string(),
-  "email": zod.string(),
-  "universityName": zod.string().nullish(),
-  "country": zod.string().nullish(),
-  "website": zod.string().nullish()
-})
-
-
-/**
- * @summary Get university's verified students
- */
-export const GetUniversityStudentsParams = zod.object({
-  "id": zod.coerce.number()
-})
-
-export const GetUniversityStudentsResponseItem = zod.object({
-  "id": zod.number(),
-  "userId": zod.number(),
-  "name": zod.string(),
-  "email": zod.string(),
-  "university": zod.string().nullish(),
-  "gpa": zod.number().nullish(),
-  "bio": zod.string().nullish(),
-  "resumeUrl": zod.string().nullish(),
-  "skills": zod.array(zod.string()).optional(),
-  "verified": zod.boolean().optional(),
-  "avatarUrl": zod.string().nullish()
-})
-export const GetUniversityStudentsResponse = zod.array(GetUniversityStudentsResponseItem)
 
 
 /**
@@ -446,6 +1061,7 @@ export const GetInternshipApplicantsResponseItem = zod.object({
   "id": zod.number(),
   "studentId": zod.number(),
   "internshipId": zod.number(),
+  "internshipTitle": zod.string().optional(),
   "studentName": zod.string().optional(),
   "studentEmail": zod.string().optional(),
   "studentAvatar": zod.string().nullish(),
@@ -454,27 +1070,33 @@ export const GetInternshipApplicantsResponseItem = zod.object({
   "coverLetter": zod.string().nullish(),
   "matchScore": zod.number().nullish(),
   "status": zod.enum(['pending', 'accepted', 'rejected', 'withdrawn']),
-  "createdAt": zod.string()
+  "createdAt": zod.string(),
+  "assessmentScores": zod.array(zod.object({
+  "skill": zod.string(),
+  "score": zod.number()
+})).optional()
 })
 export const GetInternshipApplicantsResponse = zod.array(GetInternshipApplicantsResponseItem)
 
 
 /**
- * @summary Get AI match score for logged-in student
+ * @summary Get deterministic match score for the authenticated student
  */
 export const GetMatchScoreParams = zod.object({
   "id": zod.coerce.number()
 })
 
 export const GetMatchScoreQueryParams = zod.object({
-  "studentId": zod.coerce.number()
+  "studentId": zod.coerce.number().describe('Authenticated users.id for the student; the server verifies it against the bearer session.')
 })
 
 export const GetMatchScoreResponse = zod.object({
-  "matchScore": zod.number(),
+  "matchScore": zod.number().nullable(),
   "matchExplanation": zod.string(),
   "matchedSkills": zod.array(zod.string()),
-  "missingSkills": zod.array(zod.string())
+  "missingSkills": zod.array(zod.string()),
+  "eligible": zod.boolean(),
+  "eligibilityReasons": zod.array(zod.string())
 })
 
 
@@ -482,7 +1104,7 @@ export const GetMatchScoreResponse = zod.object({
  * @summary Apply for an internship
  */
 export const CreateApplicationBody = zod.object({
-  "studentId": zod.number(),
+  "studentId": zod.number().describe('Authenticated users.id (validated against the session; students.id is derived server-side).'),
   "internshipId": zod.number(),
   "coverLetter": zod.string().optional()
 })
@@ -502,6 +1124,28 @@ export const CreateApplicationResponse = zod.object({
 
 
 /**
+ * @summary Get applications for the authenticated student user
+ */
+export const GetStudentApplicationsParams = zod.object({
+  "id": zod.coerce.number().describe('Authenticated users.id; the server resolves students.id from the session.')
+})
+
+export const GetStudentApplicationsResponseItem = zod.object({
+  "id": zod.number(),
+  "studentId": zod.number(),
+  "internshipId": zod.number(),
+  "internshipTitle": zod.string().optional(),
+  "companyName": zod.string().optional(),
+  "companyLogo": zod.string().nullish(),
+  "coverLetter": zod.string().nullish(),
+  "matchScore": zod.number().nullish(),
+  "status": zod.enum(['pending', 'accepted', 'rejected', 'withdrawn']),
+  "createdAt": zod.string()
+})
+export const GetStudentApplicationsResponse = zod.array(GetStudentApplicationsResponseItem)
+
+
+/**
  * @summary Update application status (accept/reject)
  */
 export const UpdateApplicationStatusParams = zod.object({
@@ -509,7 +1153,7 @@ export const UpdateApplicationStatusParams = zod.object({
 })
 
 export const UpdateApplicationStatusBody = zod.object({
-  "status": zod.enum(['pending', 'accepted', 'rejected', 'withdrawn'])
+  "status": zod.enum(['accepted', 'rejected'])
 })
 
 export const UpdateApplicationStatusResponse = zod.object({
@@ -522,43 +1166,6 @@ export const UpdateApplicationStatusResponse = zod.object({
   "coverLetter": zod.string().nullish(),
   "matchScore": zod.number().nullish(),
   "status": zod.enum(['pending', 'accepted', 'rejected', 'withdrawn']),
-  "createdAt": zod.string()
-})
-
-
-/**
- * @summary Get notifications for current user
- */
-export const ListNotificationsQueryParams = zod.object({
-  "userId": zod.coerce.number()
-})
-
-export const ListNotificationsResponseItem = zod.object({
-  "id": zod.number(),
-  "userId": zod.number(),
-  "title": zod.string(),
-  "message": zod.string(),
-  "read": zod.boolean(),
-  "type": zod.string().nullish(),
-  "createdAt": zod.string()
-})
-export const ListNotificationsResponse = zod.array(ListNotificationsResponseItem)
-
-
-/**
- * @summary Mark notification as read
- */
-export const MarkNotificationReadParams = zod.object({
-  "id": zod.coerce.number()
-})
-
-export const MarkNotificationReadResponse = zod.object({
-  "id": zod.number(),
-  "userId": zod.number(),
-  "title": zod.string(),
-  "message": zod.string(),
-  "read": zod.boolean(),
-  "type": zod.string().nullish(),
   "createdAt": zod.string()
 })
 
@@ -580,25 +1187,6 @@ export const ListVerificationRequestsResponseItem = zod.object({
   "createdAt": zod.string()
 })
 export const ListVerificationRequestsResponse = zod.array(ListVerificationRequestsResponseItem)
-
-
-/**
- * @summary Request verification (student)
- */
-export const CreateVerificationRequestBody = zod.object({
-  "studentId": zod.number(),
-  "universityId": zod.number()
-})
-
-export const CreateVerificationRequestResponse = zod.object({
-  "id": zod.number(),
-  "studentId": zod.number(),
-  "universityId": zod.number(),
-  "studentName": zod.string().optional(),
-  "studentEmail": zod.string().optional(),
-  "status": zod.enum(['pending', 'approved', 'rejected']),
-  "createdAt": zod.string()
-})
 
 
 /**
@@ -669,6 +1257,7 @@ export const GetCompanyDashboardResponse = zod.object({
   "id": zod.number(),
   "studentId": zod.number(),
   "internshipId": zod.number(),
+  "internshipTitle": zod.string().optional(),
   "studentName": zod.string().optional(),
   "studentEmail": zod.string().optional(),
   "studentAvatar": zod.string().nullish(),
@@ -677,7 +1266,11 @@ export const GetCompanyDashboardResponse = zod.object({
   "coverLetter": zod.string().nullish(),
   "matchScore": zod.number().nullish(),
   "status": zod.enum(['pending', 'accepted', 'rejected', 'withdrawn']),
-  "createdAt": zod.string()
+  "createdAt": zod.string(),
+  "assessmentScores": zod.array(zod.object({
+  "skill": zod.string(),
+  "score": zod.number()
+})).optional()
 })).optional()
 })
 

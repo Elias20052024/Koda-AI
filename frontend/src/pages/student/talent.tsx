@@ -13,19 +13,18 @@ type Question = {
   position: number;
   type: string;
   prompt: string;
-  options: Choice[];
+  options: Choice[] | null;
   answer: string | string[] | null;
   earnedPoints: number | string | null;
   explanation: string | null;
 };
 type Attempt = {
   id: number;
-  status: 'in_progress' | 'submitted' | 'expired';
+  status: 'in_progress' | 'pending_review' | 'submitted' | 'expired';
   startedAt: string;
   expiresAt: string;
   overallScore: number | null;
   resultExplanation: string | null;
-  explanationWarning?: string;
   questions: Question[];
 };
 type Assessment = {
@@ -54,6 +53,8 @@ type Recommendation = {
   matchScore: number | null;
   evidenceCoverage: number;
   matchExplanation: string;
+  eligible: boolean;
+  eligibilityReasons: string[];
 };
 
 const apiBase = `${(import.meta.env.BASE_URL ?? '').replace(/\/$/, '')}/api`;
@@ -98,8 +99,6 @@ export default function StudentTalent() {
   const [profileSkills, setProfileSkills] = React.useState<string[]>([]);
   const [skillInput, setSkillInput] = React.useState('');
   const [skillsSaved, setSkillsSaved] = React.useState(false);
-  const [aiExplanations, setAiExplanations] = React.useState<Record<number, string>>({});
-  const [explainingInternshipId, setExplainingInternshipId] = React.useState<number | null>(null);
   const [attempt, setAttempt] = React.useState<Attempt | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [working, setWorking] = React.useState(false);
@@ -178,22 +177,6 @@ export default function StudentTalent() {
       setError(refreshError instanceof Error ? refreshError.message : 'Could not refresh match results.');
     } finally {
       setWorking(false);
-    }
-  };
-
-  const explainRecommendation = async (internshipId: number) => {
-    setExplainingInternshipId(internshipId);
-    setError(null);
-    try {
-      const result = await requestApi<{ explanation: string }>(
-        `/talent/recommendations/${internshipId}/explanation`,
-        'POST',
-      );
-      setAiExplanations((current) => ({ ...current, [internshipId]: result.explanation }));
-    } catch (explanationError) {
-      setError(explanationError instanceof Error ? explanationError.message : 'Could not generate an AI explanation.');
-    } finally {
-      setExplainingInternshipId(null);
     }
   };
 
@@ -332,8 +315,25 @@ export default function StudentTalent() {
                   <section key={question.id} className="rounded-lg border p-4">
                     <p className="text-sm text-muted-foreground">Question {question.position}</p>
                     <h3 className="mt-2 font-medium">{question.prompt}</h3>
+                    {question.type === 'short_answer' ? (
+                      <textarea
+                        value={typeof question.answer === 'string' ? question.answer : ''}
+                        maxLength={5000}
+                        rows={5}
+                        placeholder="Write your response"
+                        disabled={working || timeRemaining === null || timeRemaining <= 0}
+                        onChange={(event) => setAttempt((current) => current ? {
+                          ...current,
+                          questions: current.questions.map((item) =>
+                            item.id === question.id ? { ...item, answer: event.target.value } : item,
+                          ),
+                        } : current)}
+                        onBlur={(event) => void saveAnswer(question, event.currentTarget.value.trim())}
+                        className="mt-4 w-full rounded-md border bg-background p-3 text-sm"
+                      />
+                    ) : (
                     <div className="mt-4 space-y-2">
-                      {question.options.map((option) => {
+                      {(question.options ?? []).map((option) => {
                         const selected = Array.isArray(question.answer)
                           ? question.answer.includes(option.id)
                           : question.answer === option.id;
@@ -359,30 +359,31 @@ export default function StudentTalent() {
                         );
                       })}
                     </div>
+                    )}
                   </section>
                 ))}
                 <Button
                   onClick={() => void submitAssessment()}
-                  disabled={working || timeRemaining === null || timeRemaining <= 0 || attempt.questions.some((question) => question.answer === null)}
+                  disabled={working || timeRemaining === null || timeRemaining <= 0 || attempt.questions.some((question) =>
+                    question.answer === null ||
+                    (question.type === 'short_answer' && (typeof question.answer !== 'string' || !question.answer.trim()))
+                  )}
                 >
                   {working ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
                   Submit assessment
                 </Button>
               </CardContent>
             </Card>
-          ) : attempt?.status === 'submitted' ? (
+          ) : attempt && (attempt.status === 'submitted' || attempt.status === 'pending_review') ? (
             <Card>
               <CardHeader>
-                <CardTitle>Assessment result</CardTitle>
+                <CardTitle>{attempt.status === 'pending_review' ? 'Assessment awaiting review' : 'Assessment result'}</CardTitle>
                 <CardDescription>{attempt.resultExplanation}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {attempt.explanationWarning && (
-                  <p className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-amber-800">
-                    The deterministic score was saved, but its AI explanation could not be generated: {attempt.explanationWarning}
-                  </p>
-                )}
-                <p className="text-3xl font-bold">{attempt.overallScore}%</p>
+                <p className="text-3xl font-bold">
+                  {attempt.overallScore === null ? 'Pending human review' : `${attempt.overallScore}%`}
+                </p>
                 {attempt.questions.map((question) => (
                   <div key={question.id} className="rounded-lg border p-4">
                     <p className="font-medium">{question.prompt}</p>
@@ -527,21 +528,14 @@ export default function StudentTalent() {
                     <CardContent className="space-y-3">
                       <p className="text-sm text-muted-foreground">{recommendation.matchExplanation}</p>
                       <p className="text-xs text-muted-foreground">Evidence coverage: {Math.round(recommendation.evidenceCoverage)}%</p>
-                      {aiExplanations[recommendation.id] && (
-                        <p className="rounded-md bg-muted/50 p-3 text-sm">{aiExplanations[recommendation.id]}</p>
+                      <Badge variant={recommendation.eligible ? 'secondary' : 'outline'}>
+                        {recommendation.eligible ? 'Eligible' : 'Eligibility criteria not met'}
+                      </Badge>
+                      {recommendation.eligibilityReasons.length > 0 && (
+                        <ul className="list-disc pl-5 text-xs text-muted-foreground">
+                          {recommendation.eligibilityReasons.map((reason) => <li key={reason}>{reason}</li>)}
+                        </ul>
                       )}
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => void explainRecommendation(recommendation.id)}
-                        disabled={explainingInternshipId !== null}
-                      >
-                        {explainingInternshipId === recommendation.id
-                          ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          : null}
-                        AI explanation
-                      </Button>
                       <Link href={`/internships/${recommendation.id}`} className="inline-flex items-center text-sm font-medium text-primary hover:underline">
                         View internship <ArrowRight className="ml-1 h-4 w-4" />
                       </Link>

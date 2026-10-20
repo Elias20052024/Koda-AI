@@ -13,17 +13,13 @@ tags:
   - name: auth
     description: Authentication operations
   - name: students
-    description: Student profile operations
+    description: Authenticated student resources
   - name: companies
-    description: Company profile operations
-  - name: universities
-    description: University operations
+    description: Company internship operations
   - name: internships
     description: Internship operations
   - name: applications
     description: Application operations
-  - name: notifications
-    description: Notification operations
   - name: verification
     description: Student verification
   - name: dashboard
@@ -58,7 +54,7 @@ paths:
             schema:
               $ref: "#/components/schemas/RegisterInput"
       responses:
-        "201":
+        "200":
           description: Registered
           content:
             application/json:
@@ -84,11 +80,38 @@ paths:
               schema:
                 $ref: "#/components/schemas/AuthResponse"
 
+  /auth/social:
+    post:
+      operationId: socialLogin
+      tags: [auth]
+      summary: Authenticate using a verified social-provider session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SocialLoginInput"
+      responses:
+        "200":
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Invalid provider session or role
+        "401":
+          description: Invalid provider session
+        "503":
+          description: Identity provider temporarily unavailable
+
   /auth/me:
     get:
       operationId: getMe
       tags: [auth]
       summary: Get current user
+      security:
+        - BearerAuth: []
       responses:
         "200":
           description: Current user
@@ -98,74 +121,12 @@ paths:
                 $ref: "#/components/schemas/User"
 
   # Students
-  /students/{id}:
-    get:
-      operationId: getStudent
-      tags: [students]
-      summary: Get student profile
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        "200":
-          description: Student profile
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/StudentProfile"
-    put:
-      operationId: updateStudent
-      tags: [students]
-      summary: Update student profile
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/StudentInput"
-      responses:
-        "200":
-          description: Updated
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/StudentProfile"
-
-  /students/{id}/applications:
-    get:
-      operationId: getStudentApplications
-      tags: [students]
-      summary: Get student's applications
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        "200":
-          description: Applications list
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Application"
-
   /students/{id}/recommended:
     get:
       operationId: getRecommendedInternships
       tags: [students]
-      summary: Get AI-recommended internships for student
+      summary: Get recommendations for an authenticated student
+      description: The path ID is the authenticated users.id; the server derives students.id from the session.
       security:
         - BearerAuth: []
       parameters:
@@ -218,32 +179,6 @@ paths:
                 items:
                   $ref: "#/components/schemas/InternshipWithMatch"
 
-  /talent/recommendations/{internshipId}/explanation:
-    post:
-      operationId: explainTalentRecommendation
-      tags: [talent]
-      summary: Generate an AI explanation without changing a deterministic match score
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: internshipId
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        "200":
-          description: AI-generated explanation grounded in the server-calculated score
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  explanation:
-                    type: string
-                  model:
-                    type: string
-
   /talent/profile:
     get:
       operationId: getTalentProfile
@@ -253,15 +188,17 @@ paths:
         - BearerAuth: []
       responses:
         "200":
-          description: Student skills, education, projects, and experience
+          description: Authenticated student's profile and matching evidence
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/StudentTalentProfile"
+        "401":
+          description: Authentication required
     put:
       operationId: updateTalentSkills
       tags: [talent]
-      summary: Update the authenticated student's skills
+      summary: Update the authenticated student's profile fields and skills
       security:
         - BearerAuth: []
       requestBody:
@@ -269,14 +206,18 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/StudentSkillsInput"
+              $ref: "#/components/schemas/StudentTalentProfileInput"
       responses:
         "200":
-          description: Updated skills
+          description: Updated profile fields and skills
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/StudentSkillsInput"
+                $ref: "#/components/schemas/StudentTalentProfileInput"
+        "400":
+          description: Invalid profile fields
+        "401":
+          description: Authentication required
 
   /talent/profile/evidence:
     put:
@@ -316,10 +257,29 @@ paths:
                 type: object
 
   /talent/company/internships/{internshipId}/requirements:
+    get:
+      operationId: getInternshipTalentRequirements
+      tags: [talent]
+      summary: Get matching rules for a company-owned internship
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: internshipId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Matching weights and eligibility requirements
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InternshipTalentRequirementsInput"
     put:
       operationId: updateInternshipTalentRequirements
       tags: [talent]
-      summary: Set role and education requirements for a company-owned internship
+      summary: Configure role, skill weights, score weights, and eligibility for a company-owned internship
       security:
         - BearerAuth: []
       parameters:
@@ -466,11 +426,11 @@ paths:
                 items:
                   $ref: "#/components/schemas/AssessmentSummary"
 
-  /talent/admin/assessment-drafts:
+  /talent/admin/assessments:
     post:
-      operationId: createAssessmentDraft
+      operationId: createAssessment
       tags: [talent]
-      summary: Generate an unpublished assessment draft for administrator review
+      summary: Create a draft assessment from authored question-bank content
       security:
         - BearerAuth: []
       requestBody:
@@ -478,10 +438,10 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/AssessmentDraftInput"
+              $ref: "#/components/schemas/AssessmentInput"
       responses:
-        "200":
-          description: Draft assessment created; no content is published automatically
+        "201":
+          description: Draft assessment created; question review and publication are required
           content:
             application/json:
               schema:
@@ -489,7 +449,7 @@ paths:
 
   /talent/admin/assessment-versions/{versionId}:
     get:
-      operationId: getAssessmentDraftForReview
+      operationId: getAssessmentForReview
       tags: [talent]
       summary: Get assessment content and answer keys for an administrator to review
       security:
@@ -508,9 +468,75 @@ paths:
               schema:
                 type: object
 
+  /talent/admin/assessment-attempts/{attemptId}/questions/{questionId}/grade:
+    post:
+      operationId: gradeSubjectiveAssessmentAnswer
+      tags: [talent]
+      summary: Grade a submitted subjective answer against its rubric
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: attemptId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: questionId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssessmentRubricGrade"
+      responses:
+        "200":
+          description: Human review recorded; results are finalized when all subjective answers are graded
+          content:
+            application/json:
+              schema:
+                type: object
+        "400":
+          description: Rubric scores are invalid
+        "409":
+          description: Attempt is not awaiting review
+
+  /talent/admin/assessment-attempts/pending-review:
+    get:
+      operationId: listAssessmentsPendingReview
+      tags: [talent]
+      summary: List subjective assessment answers awaiting rubric-based human review
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Pending answers with their prompt and review rubric
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    attemptId:
+                      type: integer
+                    studentId:
+                      type: integer
+                    assessmentTitle:
+                      type: string
+                    submittedAt:
+                      type: ["string", "null"]
+                    questions:
+                      type: array
+                      items:
+                        type: object
+
   /talent/admin/assessment-questions/{questionId}:
     put:
-      operationId: editAssessmentDraftQuestion
+      operationId: editAssessmentQuestion
       tags: [talent]
       summary: Edit an unreviewed assessment question
       security:
@@ -526,7 +552,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/QuestionDraftContent"
+              $ref: "#/components/schemas/AssessmentQuestionInput"
       responses:
         "200":
           description: Question updated
@@ -692,54 +718,11 @@ paths:
               schema:
                 $ref: "#/components/schemas/AssessmentAttempt"
 
-  # Companies
-  /companies/{id}:
-    get:
-      operationId: getCompany
-      tags: [companies]
-      summary: Get company profile
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        "200":
-          description: Company profile
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/CompanyProfile"
-    put:
-      operationId: updateCompany
-      tags: [companies]
-      summary: Update company profile
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CompanyInput"
-      responses:
-        "200":
-          description: Updated
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/CompanyProfile"
-
   /companies/{id}/internships:
     get:
       operationId: getCompanyInternships
       tags: [companies]
-      summary: Get company's internships
+      summary: Get internships for the authenticated company user
       security:
         - BearerAuth: []
       parameters:
@@ -748,6 +731,7 @@ paths:
           required: true
           schema:
             type: integer
+          description: Authenticated users.id for the company; companies.id is resolved by the server.
       responses:
         "200":
           description: Internships list
@@ -757,47 +741,6 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Internship"
-
-  # Universities
-  /universities/{id}:
-    get:
-      operationId: getUniversity
-      tags: [universities]
-      summary: Get university profile
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        "200":
-          description: University profile
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/UniversityProfile"
-
-  /universities/{id}/students:
-    get:
-      operationId: getUniversityStudents
-      tags: [universities]
-      summary: Get university's verified students
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        "200":
-          description: Students list
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/StudentProfile"
 
   # Internships
   /internships:
@@ -951,6 +894,7 @@ paths:
           required: true
           schema:
             type: integer
+          description: Authenticated users.id for the student; the server verifies it against the bearer session.
       responses:
         "200":
           description: Match result
@@ -985,7 +929,7 @@ paths:
     get:
       operationId: getStudentApplications
       tags: [applications]
-      summary: Get applications for the authenticated student
+      summary: Get applications for the authenticated student user
       security:
         - BearerAuth: []
       parameters:
@@ -994,6 +938,7 @@ paths:
           required: true
           schema:
             type: integer
+          description: Authenticated users.id; the server resolves students.id from the session.
       responses:
         "200":
           description: Student applications
@@ -1031,47 +976,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/Application"
 
-  # Notifications
-  /notifications:
-    get:
-      operationId: listNotifications
-      tags: [notifications]
-      summary: Get notifications for current user
-      parameters:
-        - name: userId
-          in: query
-          required: true
-          schema:
-            type: integer
-      responses:
-        "200":
-          description: Notifications
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Notification"
-
-  /notifications/{id}/read:
-    put:
-      operationId: markNotificationRead
-      tags: [notifications]
-      summary: Mark notification as read
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        "200":
-          description: Updated
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Notification"
-
   # Verification
   /verification:
     get:
@@ -1095,24 +999,6 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/VerificationRequest"
-    post:
-      operationId: createVerificationRequest
-      tags: [verification]
-      summary: Request verification (student)
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/VerificationInput"
-      responses:
-        "201":
-          description: Created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/VerificationRequest"
-
   /verification/{id}/status:
     put:
       operationId: updateVerificationStatus
@@ -1208,16 +1094,17 @@ components:
   schemas:
     HealthStatus:
       type: object
+      required: [ok, service]
       properties:
-        status:
+        ok:
+          type: boolean
+        service:
           type: string
-      required:
-        - status
 
     # Auth
     RegisterInput:
       type: object
-      required: [email, password, name, role]
+      required: [email, password, name]
       properties:
         email:
           type: string
@@ -1237,6 +1124,17 @@ components:
           type: string
         password:
           type: string
+
+    SocialLoginInput:
+      type: object
+      required: [accessToken]
+      properties:
+        accessToken:
+          type: string
+          maxLength: 8192
+        role:
+          type: string
+          enum: [student, company, university]
 
     AuthResponse:
       type: object
@@ -1264,114 +1162,6 @@ components:
           type: ["string", "null"]
         createdAt:
           type: string
-
-    # Student
-    StudentProfile:
-      type: object
-      required: [id, userId, name, email]
-      properties:
-        id:
-          type: integer
-        userId:
-          type: integer
-        name:
-          type: string
-        email:
-          type: string
-        university:
-          type: ["string", "null"]
-        gpa:
-          type: ["number", "null"]
-        bio:
-          type: ["string", "null"]
-        resumeUrl:
-          type: ["string", "null"]
-        skills:
-          type: array
-          items:
-            type: string
-        verified:
-          type: boolean
-        avatarUrl:
-          type: ["string", "null"]
-
-    StudentInput:
-      type: object
-      properties:
-        university:
-          type: string
-        gpa:
-          type: number
-        bio:
-          type: string
-        resumeUrl:
-          type: string
-        skills:
-          type: array
-          items:
-            type: string
-        avatarUrl:
-          type: string
-
-    # Company
-    CompanyProfile:
-      type: object
-      required: [id, userId, name, email]
-      properties:
-        id:
-          type: integer
-        userId:
-          type: integer
-        name:
-          type: string
-        email:
-          type: string
-        companyName:
-          type: ["string", "null"]
-        industry:
-          type: ["string", "null"]
-        description:
-          type: ["string", "null"]
-        website:
-          type: ["string", "null"]
-        logoUrl:
-          type: ["string", "null"]
-        verified:
-          type: boolean
-
-    CompanyInput:
-      type: object
-      properties:
-        companyName:
-          type: string
-        industry:
-          type: string
-        description:
-          type: string
-        website:
-          type: string
-        logoUrl:
-          type: string
-
-    # University
-    UniversityProfile:
-      type: object
-      required: [id, userId, name, email]
-      properties:
-        id:
-          type: integer
-        userId:
-          type: integer
-        name:
-          type: string
-        email:
-          type: string
-        universityName:
-          type: ["string", "null"]
-        country:
-          type: ["string", "null"]
-        website:
-          type: ["string", "null"]
 
     # Internship
     Internship:
@@ -1521,6 +1311,12 @@ components:
           type: ["number", "null"]
         matchExplanation:
           type: string
+        eligible:
+          type: boolean
+        eligibilityReasons:
+          type: array
+          items:
+            type: string
         evidenceCoverage:
           type: number
         weights:
@@ -1539,7 +1335,7 @@ components:
 
     MatchResult:
       type: object
-      required: [matchScore, matchExplanation, matchedSkills, missingSkills]
+      required: [matchScore, matchExplanation, matchedSkills, missingSkills, eligible, eligibilityReasons]
       properties:
         matchScore:
           type: ["number", "null"]
@@ -1550,6 +1346,12 @@ components:
           items:
             type: string
         missingSkills:
+          type: array
+          items:
+            type: string
+        eligible:
+          type: boolean
+        eligibilityReasons:
           type: array
           items:
             type: string
@@ -1591,6 +1393,8 @@ components:
           type: integer
         internshipId:
           type: integer
+        internshipTitle:
+          type: string
         studentName:
           type: string
         studentEmail:
@@ -1629,6 +1433,7 @@ components:
       properties:
         studentId:
           type: integer
+          description: Authenticated users.id (validated against the session; students.id is derived server-side).
         internshipId:
           type: integer
         coverLetter:
@@ -1641,26 +1446,6 @@ components:
         status:
           type: string
           enum: [accepted, rejected]
-
-    # Notification
-    Notification:
-      type: object
-      required: [id, userId, title, message, read, createdAt]
-      properties:
-        id:
-          type: integer
-        userId:
-          type: integer
-        title:
-          type: string
-        message:
-          type: string
-        read:
-          type: boolean
-        type:
-          type: ["string", "null"]
-        createdAt:
-          type: string
 
     # Verification
     VerificationRequest:
@@ -1683,15 +1468,6 @@ components:
         createdAt:
           type: string
 
-    VerificationInput:
-      type: object
-      required: [studentId, universityId]
-      properties:
-        studentId:
-          type: integer
-        universityId:
-          type: integer
-
     VerificationStatusInput:
       type: object
       required: [status]
@@ -1699,16 +1475,6 @@ components:
         status:
           type: string
           enum: [approved, rejected]
-
-    StudentSkillsInput:
-      type: object
-      required: [skills]
-      properties:
-        skills:
-          type: array
-          maxItems: 100
-          items:
-            type: string
 
     StudentEvidenceInput:
       type: object
@@ -1718,19 +1484,85 @@ components:
           type: array
           items:
             type: object
+            required: [name]
+            properties:
+              name:
+                type: string
+              description:
+                type: string
+              skills:
+                type: array
+                items:
+                  type: string
+              url:
+                type: string
+                maxLength: 2048
+                pattern: "^https?://"
+              startedAt:
+                type: ["string", "null"]
+                format: date-time
+              completedAt:
+                type: ["string", "null"]
+                format: date-time
         experience:
           type: array
           items:
             type: object
+            required: [organization, title]
+            properties:
+              organization:
+                type: string
+              title:
+                type: string
+              description:
+                type: string
+              skills:
+                type: array
+                items:
+                  type: string
+              startedAt:
+                type: ["string", "null"]
+                format: date-time
+              endedAt:
+                type: ["string", "null"]
+                format: date-time
         education:
           type: array
           items:
             type: object
+            required: [institution]
+            properties:
+              institution:
+                type: string
+              degree:
+                type: string
+              fieldOfStudy:
+                type: string
+              coursework:
+                type: array
+                items:
+                  type: string
+              startDate:
+                type: ["string", "null"]
+                format: date-time
+              endDate:
+                type: ["string", "null"]
+                format: date-time
 
     StudentTalentProfile:
       type: object
-      required: [skills, projects, experience, education]
+      required: [university, gpa, bio, resumeUrl, verified, skills, projects, experience, education]
       properties:
+        university:
+          type: ["string", "null"]
+        gpa:
+          type: ["number", "null"]
+        bio:
+          type: ["string", "null"]
+        resumeUrl:
+          type: ["string", "null"]
+        verified:
+          type: boolean
         skills:
           type: array
           items:
@@ -1738,15 +1570,108 @@ components:
         projects:
           type: array
           items:
-            type: object
+            $ref: "#/components/schemas/StudentProject"
         experience:
           type: array
           items:
-            type: object
+            $ref: "#/components/schemas/StudentExperience"
         education:
           type: array
           items:
-            type: object
+            $ref: "#/components/schemas/StudentEducation"
+
+    StudentTalentProfileInput:
+      type: object
+      required: [skills]
+      properties:
+        university:
+          type: ["string", "null"]
+        gpa:
+          type: ["number", "null"]
+          minimum: 0
+          maximum: 5
+        bio:
+          type: ["string", "null"]
+          maxLength: 500
+        resumeUrl:
+          type: ["string", "null"]
+          format: uri
+          maxLength: 2048
+          pattern: "^https?://"
+        skills:
+          type: array
+          maxItems: 100
+          items:
+            type: string
+
+    StudentProject:
+      type: object
+      required: [id, name, description, skills, url, startedAt, completedAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        skills:
+          type: array
+          items:
+            type: string
+        url:
+          type: ["string", "null"]
+        startedAt:
+          type: ["string", "null"]
+          format: date-time
+        completedAt:
+          type: ["string", "null"]
+          format: date-time
+
+    StudentExperience:
+      type: object
+      required: [id, organization, title, description, skills, startedAt, endedAt]
+      properties:
+        id:
+          type: integer
+        organization:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        skills:
+          type: array
+          items:
+            type: string
+        startedAt:
+          type: ["string", "null"]
+          format: date-time
+        endedAt:
+          type: ["string", "null"]
+          format: date-time
+
+    StudentEducation:
+      type: object
+      required: [id, institution, degree, fieldOfStudy, coursework, startDate, endDate]
+      properties:
+        id:
+          type: integer
+        institution:
+          type: string
+        degree:
+          type: ["string", "null"]
+        fieldOfStudy:
+          type: ["string", "null"]
+        coursework:
+          type: array
+          items:
+            type: string
+        startDate:
+          type: ["string", "null"]
+          format: date-time
+        endDate:
+          type: ["string", "null"]
+          format: date-time
 
     InternshipTalentRequirementsInput:
       type: object
@@ -1761,6 +1686,45 @@ components:
           type: array
           items:
             type: string
+        matchWeights:
+          $ref: "#/components/schemas/MatchWeights"
+        skillWeights:
+          type: object
+          additionalProperties:
+            type: number
+            minimum: 0
+            maximum: 100
+        minimumMatchScore:
+          type: ["number", "null"]
+          minimum: 0
+          maximum: 100
+        minimumAssessmentScore:
+          type: ["number", "null"]
+          minimum: 0
+          maximum: 100
+        requireVerifiedStudent:
+          type: boolean
+
+    MatchWeights:
+      type: object
+      required: [assessment, skills, projectsExperience, education]
+      properties:
+        assessment:
+          type: number
+          minimum: 0
+          maximum: 1
+        skills:
+          type: number
+          minimum: 0
+          maximum: 1
+        projectsExperience:
+          type: number
+          minimum: 0
+          maximum: 1
+        education:
+          type: number
+          minimum: 0
+          maximum: 1
 
     AssessmentSummary:
       type: object
@@ -1784,30 +1748,45 @@ components:
         questionCount:
           type: integer
 
-    AssessmentDraftInput:
+    AssessmentInput:
       type: object
-      required: [skillId, difficulty, questionCount]
+      required: [skillId, difficulty, questions]
       properties:
         skillId:
           type: integer
+        roleId:
+          type: ["integer", "null"]
+        title:
+          type: string
+          maxLength: 200
         difficulty:
           type: string
           enum: [beginner, intermediate, advanced]
-        questionCount:
+        durationMinutes:
           type: integer
           minimum: 1
-          maximum: 15
+          maximum: 240
+        questions:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/AssessmentQuestionInput"
 
-    QuestionDraftContent:
+    AssessmentQuestionInput:
       type: object
-      required: [prompt, options, answerKey, explanation]
+      required: [type, prompt]
       properties:
+        type:
+          type: string
+          enum: [single_choice, multi_select, scenario, code_reading, short_answer]
         prompt:
           type: string
+          maxLength: 2000
         options:
           type: array
-          minItems: 3
-          maxItems: 5
+          minItems: 2
+          maxItems: 10
           items:
             type: object
             required: [id, label]
@@ -1817,9 +1796,54 @@ components:
               label:
                 type: string
         answerKey:
-          type: string
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
+            - type: object
+              additionalProperties: false
+        rubric:
+          type: array
+          maxItems: 20
+          items:
+            type: object
+            required: [criterion, maxPoints]
+            properties:
+              criterion:
+                type: string
+                maxLength: 500
+              maxPoints:
+                type: number
+                exclusiveMinimum: 0
+        maxPoints:
+          type: number
+          minimum: 0.01
+          maximum: 1000
         explanation:
           type: string
+          maxLength: 2000
+
+    AssessmentRubricGrade:
+      type: object
+      required: [criteria]
+      properties:
+        criteria:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items:
+            type: object
+            required: [criterion, points]
+            properties:
+              criterion:
+                type: string
+              points:
+                type: number
+                minimum: 0
+        notes:
+          type: string
+          maxLength: 2000
 
     AssessmentHistoryItem:
       type: object
@@ -1831,7 +1855,7 @@ components:
           type: string
         status:
           type: string
-          enum: [in_progress, submitted, expired]
+          enum: [in_progress, pending_review, submitted, expired]
         startedAt:
           type: string
         submittedAt:
@@ -1856,7 +1880,7 @@ components:
           type: integer
         status:
           type: string
-          enum: [in_progress, submitted, expired]
+          enum: [in_progress, pending_review, submitted, expired]
         startedAt:
           type: string
         expiresAt:
@@ -1887,14 +1911,29 @@ components:
                 type: string
               options:
                 type: array
+                nullable: true
                 items:
                   type: object
               answer:
-                type: ["string", "array", "null"]
+                oneOf:
+                  - type: string
+                  - type: array
+                    items:
+                      type: string
+                  - type: "null"
               earnedPoints:
                 type: ["number", "null"]
               explanation:
                 type: ["string", "null"]
+              rubric:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    criterion:
+                      type: string
+                    maxPoints:
+                      type: number
 
     # Dashboards
     StudentDashboard:

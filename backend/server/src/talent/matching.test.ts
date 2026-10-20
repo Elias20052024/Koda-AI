@@ -65,3 +65,68 @@ test("evidence comparisons are case-insensitive and score ranges are validated",
     education: null,
   }), RangeError);
 });
+
+test("matching applies configured score weights, per-skill importance, and eligibility rules", () => {
+  const result = calculateInternshipEvidenceMatch({
+    requiredSkills: ["JavaScript", "SQL"],
+    studentSkills: ["JavaScript"],
+    assessmentScores: {},
+    projectSkills: [],
+    experienceSkills: [],
+    requiredCoursework: [],
+    coursework: [],
+    requiredFieldsOfStudy: [],
+    fieldsOfStudy: [],
+    studentVerified: false,
+    skillWeights: { javascript: 3, sql: 1 },
+    matchWeights: {
+      assessment: 0,
+      skills: 1,
+      projectsExperience: 0,
+      education: 0,
+    },
+    eligibility: {
+      minimumMatchScore: 80,
+      minimumAssessmentScore: 70,
+      requireVerifiedStudent: true,
+    },
+  });
+
+  assert.equal(result.score, 75);
+  assert.equal(result.components.skills.score, 75);
+  assert.equal(result.eligible, false);
+  assert.deepEqual(result.eligibilityReasons, [
+    "A verified student profile is required.",
+    "Assessment score must be at least 70%.",
+    "Match score must be at least 80%.",
+  ]);
+});
+
+test("custom component weights are normalized and reject invalid configurations", () => {
+  const result = calculateMatchScore({
+    assessment: 100,
+    skills: 0,
+    projectsExperience: null,
+    education: null,
+  }, {
+    assessment: 3,
+    skills: 1,
+    projectsExperience: 0,
+    education: 0,
+  });
+
+  assert.equal(result.score, 75);
+  assert.equal(result.components.assessment.weight, 0.75);
+  assert.equal(result.components.skills.weight, 0.25);
+  assert.throws(() => calculateMatchScore({
+    assessment: 100,
+    skills: null,
+    projectsExperience: null,
+    education: null,
+  }, {
+    assessment: 0,
+    skills: 0,
+    projectsExperience: 0,
+    education: 0,
+  }), RangeError);
+});

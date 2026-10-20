@@ -48,9 +48,8 @@ export default function PrivacyPage() {
               <h2 className="text-3xl font-bold text-foreground mb-6">1. Introduction</h2>
               <div className="prose prose-invert max-w-none">
                 <p className="text-muted-foreground leading-relaxed mb-4">
-                  Koda AI is an AI-powered internship matching platform that connects IT students with companies and
-                  universities. Our platform uses advanced algorithms to help students discover internship opportunities
-                  and helps companies identify suitable candidates based on skills and experience.
+                  Koda AI connects IT students with companies and universities. Its matching feature applies configurable
+                  rules to profile skills, assessment results, and internship requirements to help users discover opportunities.
                 </p>
                 <p className="text-muted-foreground leading-relaxed">
                   By using Koda AI, you agree to the terms of this Privacy Policy. This policy applies to all users,
@@ -258,29 +257,30 @@ export default function PrivacyPage() {
               </div>
             </motion.section>
 
-            {/* 4. AI Matching and Assessment Data */}
+            {/* 4. Matching and Assessment Data */}
             <motion.section
-              id="ai-matching"
+              id="matching-and-assessments"
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5 }}
               viewport={{ once: true }}
               className="mb-16 scroll-mt-24"
             >
-              <h2 className="text-3xl font-bold text-foreground mb-6">4. AI Matching and Assessment Data</h2>
+              <h2 className="text-3xl font-bold text-foreground mb-6">4. Matching and Assessment Data</h2>
               <div className="space-y-4">
                 <p className="text-muted-foreground leading-relaxed">
-                  Koda AI uses machine learning algorithms to analyze student skills, experience, and preferences
-                  alongside company internship requirements to generate matching recommendations. This process involves:
+                  Koda AI applies configurable, deterministic rules to compare student profile evidence and assessment
+                  results with company internship requirements. Objective assessment questions are scored against
+                  predefined answer keys; subjective answers are reviewed by a human against a published rubric.
                 </p>
                 <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 text-muted-foreground leading-relaxed">
                   <p className="font-semibold text-foreground mb-2">Important Notes:</p>
                   <ul className="list-disc list-inside space-y-2 text-sm">
-                    <li>AI recommendations are designed to assist users in discovering opportunities</li>
+                    <li>Match scores describe how available profile evidence compares with configured role requirements</li>
                     <li>Match scores and rankings do not guarantee internship placement</li>
                     <li>Companies make final hiring decisions independently</li>
-                    <li>Students can review and update their assessment results and profile information at any time</li>
-                    <li>Assessment data is used exclusively for matching purposes within our platform</li>
+                    <li>Students can review their assessment results and update their profile information</li>
+                    <li>Assessment results are used for matching and, where applicable, shared only under the platform's consent controls</li>
                   </ul>
                 </div>
               </div>

@@ -6,4 +6,6 @@ Social sign-in requires the existing Supabase project settings on the server (`S
 
 Existing plaintext passwords are upgraded to scrypt hashes on successful login. Signed sessions replace the previous unsigned development tokens, so users with an older browser session need to sign in again.
 
+The platform does not use AI providers or model-generated content. Administrators author assessment questions in the question bank; objective questions are scored from reviewed answer keys and subjective answers are graded by a human against a rubric. Internship recommendations use configurable deterministic rules.
+
 Run backend tests with `pnpm --filter @workspace/server test`.

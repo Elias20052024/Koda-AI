@@ -15,8 +15,8 @@ const sections = [
     id: 'about',
     title: '2. About Koda AI',
     paragraphs: [
-      'Koda AI provides an AI-powered internship matching platform that helps IT students discover internship opportunities and supports companies in identifying suitable candidates.',
-      'The platform uses user-provided information, assessments, and matching technology to generate recommendations for the Phase 1 MVP experience.',
+      'Koda AI provides an internship platform that helps IT students discover opportunities and supports companies in reviewing candidates.',
+      'The platform compares user-provided information, assessment results, and internship requirements using configurable rules.',
     ],
   },
   {
@@ -89,15 +89,14 @@ const sections = [
     ],
   },
   {
-    id: 'ai',
-    title: '9. AI Matching System',
+    id: 'matching',
+    title: '9. Matching and Assessment',
     paragraphs: [
-      'Koda AI may analyze available profile information, assessments, and internship requirements to generate matching recommendations for users.',
+      'Koda AI uses configurable rules, skill weights, assessment results, and eligibility criteria to calculate internship match scores. Objective assessment items are scored against predefined answer keys. Subjective responses are reviewed by a human using a rubric.',
     ],
     bullets: [
-      'AI recommendations are suggestions only and are not guarantees of selection or success.',
-      'Matching scores may be used to improve discoverability, but they do not replace human review.',
-      'Companies remain responsible for their final hiring and recruitment decisions.',
+      'Match scores explain how the available profile evidence compares with internship requirements and are not guarantees of selection or success.',
+      'Companies are responsible for reviewing applicants and making final hiring decisions.',
     ],
   },
   {

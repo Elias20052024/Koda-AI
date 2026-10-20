@@ -19,7 +19,6 @@ import InternshipsPage from '@/pages/internships';
 import InternshipDetailPage from '@/pages/internship-detail';
 import AboutPage from '@/pages/about';
 import ContactPage from '@/pages/contact';
-import AIPage from '@/pages/ai';
 import PrivacyPage from '@/pages/privacy';
 import TermsPage from '@/pages/terms';
 import NotFound from '@/pages/not-found';
@@ -92,9 +91,6 @@ function Router() {
       </Route>
       <Route path="/contact">
         <PublicLayout><ContactPage /></PublicLayout>
-      </Route>
-      <Route path="/ai">
-        <PublicLayout><AIPage /></PublicLayout>
       </Route>
       <Route path="/privacy">
         <PublicLayout><PrivacyPage /></PublicLayout>

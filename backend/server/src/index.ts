@@ -2,11 +2,11 @@ import 'dotenv/config';
 import { randomBytes as cryptoRandomBytes } from 'node:crypto';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { db } from '@workspace/db';
 import { createSessionToken, getSessionUserId, hashPassword, verifyPassword } from './auth.js';
-import { registerAiChatRoute } from './ai/routes.js';
 import { registerTalentRoutes } from './talent/routes.js';
+import { hasValidCompanyAssessmentConsent } from './talent/privacy.js';
 import {
   usersTable,
   studentsTable,
@@ -15,6 +15,7 @@ import {
   internshipsTable,
   applicationsTable,
   verificationRequestsTable,
+  companyAssessmentConsentsTable,
 } from '@workspace/db/schema';
 
 type UserRole = 'student' | 'company' | 'university' | 'admin';
@@ -92,6 +93,22 @@ async function createUser(payload: {
     avatarUrl: record.avatarUrl,
     createdAt: record.createdAt,
   } satisfies UserRecord;
+}
+
+async function ensureRoleProfile(user: UserRecord) {
+  if (user.role === 'student') {
+    await db.insert(studentsTable)
+      .values({ userId: user.id })
+      .onConflictDoNothing({ target: studentsTable.userId });
+  } else if (user.role === 'company') {
+    await db.insert(companiesTable)
+      .values({ userId: user.id, companyName: user.name })
+      .onConflictDoNothing({ target: companiesTable.userId });
+  } else if (user.role === 'university') {
+    await db.insert(universitiesTable)
+      .values({ userId: user.id, universityName: user.name })
+      .onConflictDoNothing({ target: universitiesTable.userId });
+  }
 }
 
 async function getUserByEmail(email: string) {
@@ -228,11 +245,14 @@ async function buildStudentDashboard(studentId: number) {
 
         return {
           id: app.id,
+          studentId: app.studentId,
+          internshipId: app.internshipId,
           internshipTitle: internship?.title ?? 'Unknown Role',
           companyName: company?.companyName ?? 'Unknown Company',
+          companyLogo: company?.logoUrl ?? null,
           status: app.status,
           createdAt: app.createdAt instanceof Date ? app.createdAt.toISOString() : app.createdAt,
-          matchScore: app.matchScore ?? 0,
+          matchScore: app.matchScore ?? null,
         };
       }),
   );
@@ -267,6 +287,17 @@ async function buildCompanyDashboard(companyUserId: number) {
   const totalApplicants = companyApplications.length;
   const pendingApplicants = companyApplications.filter((application) => application.status === 'pending').length;
   const acceptedApplicants = companyApplications.filter((application) => application.status === 'accepted').length;
+  const activeConsents = companyApplications.length
+    ? await db.select({
+        applicationId: companyAssessmentConsentsTable.applicationId,
+        studentId: companyAssessmentConsentsTable.studentId,
+        revokedAt: companyAssessmentConsentsTable.revokedAt,
+      }).from(companyAssessmentConsentsTable)
+        .where(and(
+          inArray(companyAssessmentConsentsTable.applicationId, companyApplications.map((application) => application.id)),
+          isNull(companyAssessmentConsentsTable.revokedAt),
+        ))
+    : [];
 
   const recentApplications = await Promise.all(
     companyApplications
@@ -281,12 +312,16 @@ async function buildCompanyDashboard(companyUserId: number) {
 
         return {
           id: app.id,
+          studentId: app.studentId,
+          internshipId: app.internshipId,
           studentName: user?.name ?? 'Unknown Student',
           studentEmail: user?.email ?? '',
           studentAvatar: user?.avatarUrl ?? null,
           studentSkills: student?.skills ?? [],
           coverLetter: app.coverLetter ?? null,
-          matchScore: app.matchScore ?? 0,
+          matchScore: hasValidCompanyAssessmentConsent(activeConsents, app.id, app.studentId)
+            ? app.matchScore ?? null
+            : null,
           status: app.status,
           internshipTitle: internship?.title ?? 'Unknown Role',
           createdAt: app.createdAt instanceof Date ? app.createdAt.toISOString() : app.createdAt,
@@ -310,7 +345,9 @@ async function buildUniversityDashboard(universityUserId: number) {
     return null;
   }
 
-  const students = await db.select().from(studentsTable).where(eq(studentsTable.university, university.universityName));
+  const students = university.universityName
+    ? await db.select().from(studentsTable).where(eq(studentsTable.university, university.universityName))
+    : [];
   const totalStudents = students.length;
   const verifiedStudents = students.filter((student) => student.verified).length;
 
@@ -365,15 +402,6 @@ async function start() {
   app.get('/api/healthz', async () => ({ ok: true, service: 'koda-ai-server' }));
   app.get('/healthz', async () => ({ ok: true, service: 'koda-ai-server' }));
 
-  registerAiChatRoute(app, {
-    resolveUser: async (authorization) => {
-      const userId = getSessionUserId(authorization);
-      const user = userId
-        ? (await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1))[0]
-        : null;
-      return user ? { name: user.name, role: user.role } : null;
-    },
-  });
   registerTalentRoutes(app);
 
   app.post('/api/auth/register', async (request, reply) => {
@@ -443,6 +471,7 @@ async function start() {
         .where(eq(usersTable.id, user.id));
     }
 
+    await ensureRoleProfile(user);
     return buildAuthResponse(user);
   });
 
@@ -483,10 +512,16 @@ async function start() {
       });
     }
 
+    if (!user) {
+      reply.code(500);
+      return { error: 'failed to resolve user account' };
+    }
+
+    await ensureRoleProfile(user);
     return buildAuthResponse(user);
   });
 
-  app.get('/api/dashboard/student', async (request, reply) => {
+  app.get<{ Querystring: { studentId?: string } }>('/api/dashboard/student', async (request, reply) => {
     const user = await authenticateRequest(request);
     if (!user) {
       reply.code(401);
@@ -497,6 +532,7 @@ async function start() {
       return { error: 'student access required' };
     }
 
+    await ensureRoleProfile(user);
     const studentId = parseIntegerQuery(request.query.studentId);
     if (!studentId || studentId !== user.id) {
       reply.code(400);
@@ -512,7 +548,7 @@ async function start() {
     return dashboard;
   });
 
-  app.get('/api/dashboard/company', async (request, reply) => {
+  app.get<{ Querystring: { companyId?: string } }>('/api/dashboard/company', async (request, reply) => {
     const user = await authenticateRequest(request);
     if (!user) {
       reply.code(401);
@@ -523,6 +559,7 @@ async function start() {
       return { error: 'company access required' };
     }
 
+    await ensureRoleProfile(user);
     const companyId = parseIntegerQuery(request.query.companyId);
     if (!companyId || companyId !== user.id) {
       reply.code(400);
@@ -538,7 +575,7 @@ async function start() {
     return dashboard;
   });
 
-  app.get('/api/dashboard/university', async (request, reply) => {
+  app.get<{ Querystring: { universityId?: string } }>('/api/dashboard/university', async (request, reply) => {
     const user = await authenticateRequest(request);
     if (!user) {
       reply.code(401);
@@ -549,6 +586,7 @@ async function start() {
       return { error: 'university access required' };
     }
 
+    await ensureRoleProfile(user);
     const universityId = parseIntegerQuery(request.query.universityId);
     if (!universityId || universityId !== user.id) {
       reply.code(400);
@@ -564,7 +602,7 @@ async function start() {
     return dashboard;
   });
 
-  app.get('/api/verification', async (request, reply) => {
+  app.get<{ Querystring: { universityId?: string } }>('/api/verification', async (request, reply) => {
     const user = await authenticateRequest(request);
     if (!user) {
       reply.code(401);
@@ -591,7 +629,7 @@ async function start() {
     const result = await Promise.all(
       requests.map(async (requestRow) => {
         const student = (await db.select().from(studentsTable).where(eq(studentsTable.id, requestRow.studentId)).limit(1))[0];
-        const user = student
+        const studentUser = student
           ? (await db.select().from(usersTable).where(eq(usersTable.id, student.userId)).limit(1))[0]
           : null;
 
@@ -601,8 +639,8 @@ async function start() {
           universityId: requestRow.universityId,
           status: requestRow.status,
           createdAt: requestRow.createdAt instanceof Date ? requestRow.createdAt.toISOString() : requestRow.createdAt,
-          studentName: user?.name ?? 'Unknown Student',
-          studentEmail: user?.email ?? '',
+          studentName: studentUser?.name ?? 'Unknown Student',
+          studentEmail: studentUser?.email ?? '',
         };
       }),
     );
@@ -610,7 +648,7 @@ async function start() {
     return result;
   });
 
-  app.put('/api/verification/:id/status', async (request, reply) => {
+  app.put<{ Params: { id: string } }>('/api/verification/:id/status', async (request, reply) => {
     const user = await authenticateRequest(request);
     if (!user) {
       reply.code(401);
@@ -622,10 +660,16 @@ async function start() {
     }
 
     const id = Number(request.params.id);
-    const body = request.body as Record<string, unknown>;
-    const status = String(body.status ?? '').trim();
+    const body = request.body && typeof request.body === 'object' && !Array.isArray(request.body)
+      ? request.body as Record<string, unknown>
+      : {};
+    const status = body.status;
 
-    if (!Number.isSafeInteger(id) || id <= 0 || !['approved', 'rejected'].includes(status)) {
+    if (
+      !Number.isSafeInteger(id) ||
+      id <= 0 ||
+      (status !== 'approved' && status !== 'rejected')
+    ) {
       reply.code(400);
       return { error: 'invalid id or status' };
     }
@@ -635,32 +679,40 @@ async function start() {
       reply.code(404);
       return { error: 'university not found' };
     }
-    const existingRequest = (await db.select().from(verificationRequestsTable)
-      .where(and(
-        eq(verificationRequestsTable.id, id),
-        eq(verificationRequestsTable.universityId, university.id),
-      ))
-      .limit(1))[0];
-    if (!existingRequest) {
-      reply.code(404);
-      return { error: 'verification request not found' };
-    }
+    const requestRow = await db.transaction(async (transaction) => {
+      const updated = (await transaction.update(verificationRequestsTable)
+        .set({ status })
+        .where(and(
+          eq(verificationRequestsTable.id, id),
+          eq(verificationRequestsTable.universityId, university.id),
+          eq(verificationRequestsTable.status, 'pending'),
+        ))
+        .returning())[0];
+      if (!updated) return null;
 
-    const updatedRows = await db.update(verificationRequestsTable)
-      .set({ status })
-      .where(and(
-        eq(verificationRequestsTable.id, id),
-        eq(verificationRequestsTable.universityId, university.id),
-      ))
-      .returning();
-    const requestRow = updatedRows[0];
+      if (status === 'approved') {
+        await transaction.update(studentsTable)
+          .set({ verified: true })
+          .where(eq(studentsTable.id, updated.studentId));
+      }
+      return updated;
+    });
     if (!requestRow) {
-      reply.code(404);
-      return { error: 'verification request not found' };
+      const existingRequest = (await db.select({ id: verificationRequestsTable.id })
+        .from(verificationRequestsTable)
+        .where(and(
+          eq(verificationRequestsTable.id, id),
+          eq(verificationRequestsTable.universityId, university.id),
+        ))
+        .limit(1))[0];
+      reply.code(existingRequest ? 409 : 404);
+      return { error: existingRequest
+        ? 'verification request has already been reviewed'
+        : 'verification request not found' };
     }
 
     const student = (await db.select().from(studentsTable).where(eq(studentsTable.id, requestRow.studentId)).limit(1))[0];
-    const user = student
+    const studentUser = student
       ? (await db.select().from(usersTable).where(eq(usersTable.id, student.userId)).limit(1))[0]
       : null;
 
@@ -670,8 +722,8 @@ async function start() {
       universityId: requestRow.universityId,
       status: requestRow.status,
       createdAt: requestRow.createdAt instanceof Date ? requestRow.createdAt.toISOString() : requestRow.createdAt,
-      studentName: user?.name ?? 'Unknown Student',
-      studentEmail: user?.email ?? '',
+      studentName: studentUser?.name ?? 'Unknown Student',
+      studentEmail: studentUser?.email ?? '',
     };
   });
 

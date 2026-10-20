@@ -187,7 +187,7 @@ export default function ContactPage() {
     {
       question: 'How can companies post internships?',
       answer:
-        'Companies can create an account, verify their business information, and access the internship posting dashboard. You can define role requirements, skills needed, and let our AI matching system find qualified candidates.',
+        'Companies can create an account, verify their business information, post internships, and set role, skill, and eligibility requirements for transparent candidate matching.',
     },
     {
       question: 'How do universities become partners?',

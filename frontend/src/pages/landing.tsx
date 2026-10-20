@@ -11,7 +11,6 @@ import {
   Target,
   ShieldCheck,
   CheckCircle2,
-  Brain,
   Sparkles,
   Users,
   Award,
@@ -68,11 +67,11 @@ export default function LandingPage() {
   const faqItems = [
     {
       question: 'What is Koda AI?',
-      answer: 'Koda AI is an intelligent internship matching platform that connects IT students with companies seeking technical talent. We use AI to match students based on their technical skills, experience, and learning goals with internship opportunities that fit their growth trajectory.',
+      answer: 'Koda AI connects IT students with internship opportunities through configurable matching rules that compare profile skills, assessment results, and company requirements.',
     },
     {
-      question: 'How does AI matching work?',
-      answer: 'Our AI analyzes student profiles including technical skills, projects, assessments, and academic background, then compares them against company internship requirements. The system calculates compatibility scores across multiple dimensions and presents the best matches first.',
+      question: 'How are internships matched?',
+      answer: 'The platform applies configurable rules to compare student skills, assessment results, projects, experience, and education with company requirements. Match scores show their component weights and evidence coverage.',
     },
     {
       question: 'Is Koda AI free?',
@@ -88,7 +87,7 @@ export default function LandingPage() {
     },
     {
       question: 'How do companies recruit interns?',
-      answer: 'Companies post internship positions, and our AI surfaces qualified student matches. Companies review profiles, conduct interviews, and manage the entire hiring workflow through our dashboard.',
+      answer: 'Companies post internship positions, review applicants against their requirements, conduct interviews, and manage hiring through the platform.',
     },
   ];
 
@@ -116,7 +115,7 @@ export default function LandingPage() {
                 className="inline-flex items-center rounded-full border bg-gradient-to-r from-[#33D6D1]/10 to-[#7A4DFF]/10 px-4 py-2 text-sm font-medium"
               >
                 <Sparkles className="h-4 w-4 mr-2 text-[#33D6D1]" />
-                Intelligent internship matching powered by AI
+                Transparent, skills-based internship matching
               </motion.div>
             </div>
 
@@ -142,7 +141,7 @@ export default function LandingPage() {
               transition={{ duration: 0.5, delay: 0.2 }}
               className="text-lg md:text-xl text-muted-foreground mb-12 max-w-3xl mx-auto text-center leading-relaxed"
             >
-              Koda AI connects talented IT students with companies through intelligent skill-based matching. 
+              Koda AI connects IT students with companies through transparent, configurable skill-based matching.
               Experience faster recruitment, better fits, and the future of internship discovery.
             </motion.p>
 
@@ -179,7 +178,7 @@ export default function LandingPage() {
               className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 max-w-5xl mx-auto"
             >
               {[
-                { icon: Brain, label: 'AI Matching', color: 'from-[#33D6D1]' },
+                { icon: Target, label: 'Rule-Based Matching', color: 'from-[#33D6D1]' },
                 { icon: Zap, label: 'Recommendations', color: 'from-[#35B7FF]' },
                 { icon: Award, label: 'Skill Assessment', color: 'from-[#7A4DFF]' },
                 { icon: ShieldCheck, label: 'Verified Profiles', color: 'from-[#33D6D1]' },
@@ -222,7 +221,7 @@ export default function LandingPage() {
               Companies & Universities
             </h2>
             <p className="text-lg text-muted-foreground">
-              Every user type benefits from our intelligent platform designed for career growth and talent acquisition.
+              Every user type benefits from practical tools for career growth and talent acquisition.
             </p>
           </motion.div>
 
@@ -287,7 +286,7 @@ export default function LandingPage() {
                 </p>
                 <ul className="space-y-3 mb-8">
                   {[
-                    'AI-powered candidate matching',
+                    'Configurable candidate matching',
                     'Pre-qualified applicants',
                     'Unified hiring dashboard',
                     'Faster time-to-hire',
@@ -380,9 +379,9 @@ export default function LandingPage() {
           >
             {[
               {
-                icon: Brain,
-                title: 'AI-Powered Matching',
-                description: 'Advanced algorithms analyze skills and preferences to create perfect matches.',
+                icon: Target,
+                title: 'Transparent Matching',
+                description: 'Configurable rules compare skills, assessment results, and eligibility requirements.',
               },
               {
                 icon: Zap,
@@ -454,8 +453,8 @@ export default function LandingPage() {
             className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto"
           >
             {[
-              { icon: Brain, title: 'AI Skill Assessment', desc: 'Technical evaluations that measure real competency' },
-              { icon: Target, title: 'Smart Matching', desc: 'Intelligent algorithm connects the right people' },
+              { icon: Target, title: 'Reviewed Skill Assessments', desc: 'Objective questions are scored automatically; written answers are reviewed against a rubric' },
+              { icon: Target, title: 'Rule-Based Matching', desc: 'Configurable weights and eligibility criteria compare student evidence with role requirements' },
               { icon: Users, title: 'Student Dashboard', desc: 'Manage profile, applications, and opportunities' },
               { icon: Building2, title: 'Company Portal', desc: 'Post positions and manage hiring workflow' },
               { icon: ShieldCheck, title: 'University Verification', desc: 'Verify enrollment and monitor placements' },
@@ -511,8 +510,8 @@ export default function LandingPage() {
               {[
                 { num: 1, title: 'Register', desc: 'Create your account as a student, company, or university' },
                 { num: 2, title: 'Complete Profile', desc: 'Add your skills, experience, and career preferences' },
-                { num: 3, title: 'Technical Assessment', desc: 'Take our AI-powered skill evaluation tests' },
-                { num: 4, title: 'AI Analysis', desc: 'Our system analyzes your unique skill profile' },
+                { num: 3, title: 'Technical Assessment', desc: 'Complete reviewed objective or rubric-based skill assessments' },
+                { num: 4, title: 'Rule-Based Matching', desc: 'See how your profile evidence compares with internship requirements' },
                 { num: 5, title: 'Receive Matches', desc: 'Get personalized internship recommendations' },
                 { num: 6, title: 'Apply', desc: 'Apply to opportunities that match your goals' },
                 { num: 7, title: 'Company Review', desc: 'Companies review your profile and match score' },
@@ -766,7 +765,7 @@ export default function LandingPage() {
               Ready to Find Your Next Internship?
             </h2>
             <p className="text-lg text-muted-foreground mb-12 leading-relaxed">
-              Join Koda AI today and connect with internship opportunities powered by intelligent matching. 
+              Join Koda AI today and connect with internship opportunities through transparent matching rules.
               Whether you're a student looking to launch your career, a company seeking top talent, 
               or a university verifying placements, we have you covered.
             </p>

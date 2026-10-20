@@ -1,6 +1,10 @@
 import React from 'react';
 import { useAuth } from '@/hooks/use-auth';
-import { useGetStudent, useUpdateStudent } from '@workspace/api-client-react';
+import {
+  useGetTalentProfile,
+  useReplaceTalentEvidence,
+  useUpdateTalentSkills,
+} from '@workspace/api-client-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -26,69 +30,50 @@ const profileSchema = z.object({
 export default function StudentProfile() {
   const { auth } = useAuth();
   const { toast } = useToast();
-  const studentId = auth?.user?.id || 0;
   const [skillInput, setSkillInput] = React.useState('');
   const [courseworkInput, setCourseworkInput] = React.useState('');
 
-  const { data: student, isLoading } = useGetStudent(studentId, {
-    query: { enabled: !!studentId, queryKey: ['student', studentId] }
+  const {
+    data: student,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useGetTalentProfile({
+    query: { enabled: !!auth?.user?.id, queryKey: ['talent-profile', auth?.user?.id] }
   });
 
-  const updateMutation = useUpdateStudent();
-
-  // Mock data fallback
-  const mockStudent = {
-    name: auth?.user?.name || "Student Name",
-    email: auth?.user?.email || "student@example.com",
-    university: "Stanford University",
-    gpa: 3.8,
-    bio: "Computer Science junior passionate about frontend development and UI design.",
-    skills: ["React", "TypeScript", "HTML/CSS", "Git", "Figma"],
-    coursework: ["Data Structures", "Algorithms", "Machine Learning", "Human-Computer Interaction"],
-    verified: true,
-  };
-
-  const storedCoursework = React.useMemo(() => {
-    if (typeof window === 'undefined') return undefined;
-    try {
-      const raw = window.localStorage.getItem('student_coursework');
-      return raw ? (JSON.parse(raw) as string[]) : undefined;
-    } catch {
-      return undefined;
-    }
-  }, []);
-
-  const data = {
-    ...mockStudent,
-    ...(student ?? {}),
-    coursework: storedCoursework ?? student?.coursework ?? mockStudent.coursework,
-  };
+  const updateMutation = useUpdateTalentSkills();
+  const evidenceMutation = useReplaceTalentEvidence();
+  const coursework = React.useMemo(
+    () => student?.education.flatMap((entry) => entry.coursework) ?? [],
+    [student?.education],
+  );
 
   const form = useForm<z.infer<typeof profileSchema>>({
     resolver: zodResolver(profileSchema),
     defaultValues: {
-      university: data.university || '',
-      gpa: data.gpa ?? undefined,
-      bio: data.bio || '',
-      resumeUrl: data.resumeUrl || '',
-      skills: data.skills || [],
-      coursework: data.coursework || [],
+      university: '',
+      gpa: undefined,
+      bio: '',
+      resumeUrl: '',
+      skills: [],
+      coursework: [],
     },
   });
 
-  // Reset form when data loads
   React.useEffect(() => {
     if (student) {
       form.reset({
-        university: student.university || '',
-        gpa: student.gpa || undefined,
-        bio: student.bio || '',
-        resumeUrl: student.resumeUrl || '',
-        skills: student.skills || [],
-        coursework: student.coursework || [],
+        university: student.university ?? '',
+        gpa: student.gpa ?? undefined,
+        bio: student.bio ?? '',
+        resumeUrl: student.resumeUrl ?? '',
+        skills: student.skills,
+        coursework,
       });
     }
-  }, [student, form]);
+  }, [student, coursework, form]);
 
   const handleAddSkill = (e: React.KeyboardEvent | React.MouseEvent) => {
     if ((e.type === 'keydown' && (e as React.KeyboardEvent).key !== 'Enter') || !skillInput.trim()) return;
@@ -123,28 +108,78 @@ export default function StudentProfile() {
   };
 
   const onSubmit = async (values: z.infer<typeof profileSchema>) => {
-    const payload = {
-      university: values.university,
-      gpa: values.gpa,
-      bio: values.bio,
-      resumeUrl: values.resumeUrl,
-      skills: values.skills,
-    };
-
     try {
       await updateMutation.mutateAsync({
-        id: studentId,
-        data: payload,
+        data: {
+          university: values.university,
+          gpa: values.gpa ?? null,
+          bio: values.bio || null,
+          resumeUrl: values.resumeUrl || null,
+          skills: values.skills,
+        },
       });
-      window.localStorage.setItem('student_coursework', JSON.stringify(values.coursework || []));
+      if (student) {
+        await evidenceMutation.mutateAsync({
+          data: {
+            projects: student.projects.map((project) => ({
+              name: project.name,
+              description: project.description,
+              skills: project.skills,
+              url: project.url ?? undefined,
+              startedAt: project.startedAt,
+              completedAt: project.completedAt,
+            })),
+            experience: student.experience.map((entry) => ({
+              organization: entry.organization,
+              title: entry.title,
+              description: entry.description,
+              skills: entry.skills,
+              startedAt: entry.startedAt,
+              endedAt: entry.endedAt,
+            })),
+            education: student.education.length
+              ? student.education.map((entry, index) => ({
+                  institution: index === 0 ? values.university : entry.institution,
+                  degree: entry.degree ?? undefined,
+                  fieldOfStudy: entry.fieldOfStudy ?? undefined,
+                  coursework: index === 0 ? values.coursework ?? [] : entry.coursework,
+                  startDate: entry.startDate,
+                  endDate: entry.endDate,
+                }))
+              : [{
+                  institution: values.university,
+                  coursework: values.coursework ?? [],
+                }],
+          },
+        });
+      }
+      await refetch();
       toast({ title: "Profile updated successfully" });
-    } catch (e) {
-      window.localStorage.setItem('student_coursework', JSON.stringify(values.coursework || []));
-      toast({ title: "Profile updated (Demo Mode)" });
+    } catch (saveError) {
+      toast({
+        variant: "destructive",
+        title: "Could not update profile",
+        description: saveError instanceof Error ? saveError.message : "Please try again.",
+      });
     }
   };
 
-  if (isLoading && !student) return <div className="flex justify-center p-12"><Loader2 className="animate-spin text-primary h-8 w-8" /></div>;
+  if (isLoading) return <div className="flex justify-center p-12"><Loader2 className="animate-spin text-primary h-8 w-8" /></div>;
+  if (isError || !student) {
+    return (
+      <div className="mx-auto max-w-4xl space-y-4 p-8 text-center">
+        <h1 className="text-2xl font-semibold">Could not load your profile</h1>
+        <p className="text-muted-foreground">
+          {error instanceof Error ? error.message : "Your profile is unavailable."}
+        </p>
+        <Button variant="outline" onClick={() => void refetch()}>Try again</Button>
+      </div>
+    );
+  }
+
+  const name = auth?.user?.name ?? "Student";
+  const email = auth?.user?.email ?? "";
+  const avatarUrl = auth?.user?.avatarUrl ?? "";
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-500">
@@ -158,15 +193,15 @@ export default function StudentProfile() {
           <Card>
             <CardContent className="pt-6 flex flex-col items-center text-center">
               <Avatar className="h-24 w-24 mb-4 ring-4 ring-background shadow-md">
-                <AvatarImage src={data.avatarUrl || ''} />
+                <AvatarImage src={avatarUrl} />
                 <AvatarFallback className="text-2xl brand-gradient text-white">
-                  {data.name.substring(0, 2).toUpperCase()}
+                  {name.substring(0, 2).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
-              <h3 className="font-bold text-lg">{data.name}</h3>
-              <p className="text-sm text-muted-foreground">{data.email}</p>
+              <h3 className="font-bold text-lg">{name}</h3>
+              <p className="text-sm text-muted-foreground">{email}</p>
               
-              {data.verified && (
+              {student.verified && (
                 <Badge variant="outline" className="mt-4 bg-green-50 text-green-700 border-green-200 gap-1 font-medium">
                   <div className="h-2 w-2 rounded-full bg-green-500"></div>
                   University Verified
@@ -329,9 +364,9 @@ export default function StudentProfile() {
                     <Button 
                       type="submit" 
                       className="brand-gradient text-white border-0 px-8"
-                      disabled={updateMutation.isPending || !form.formState.isDirty}
+                      disabled={updateMutation.isPending || evidenceMutation.isPending || !form.formState.isDirty}
                     >
-                      {updateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                      {updateMutation.isPending || evidenceMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                       Save Changes
                     </Button>
                   </div>

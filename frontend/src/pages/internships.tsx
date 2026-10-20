@@ -17,43 +17,25 @@ export default function InternshipsPage() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  // Using generated hook with empty object initially, though params can be passed
-  const { data: internships, isLoading, error } = useListInternships(
-    { search: debouncedSearch } as any, // TypeScript might complain depending on Orval exact spec, casting to any if needed, but lets assume it accepts an object.
+  const {
+    data: internships,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useListInternships(
+    { search: debouncedSearch },
     { query: { queryKey: ['internships', debouncedSearch] } }
   );
 
-  // Mock data fallback if API fails
-  const mockInternships = [
-    {
-      id: 1, companyId: 101, companyName: "Vercel", title: "Frontend Engineering Intern", 
-      location: "Remote, US", type: "Summer 2024", duration: "12 Weeks", salary: "$45/hr",
-      skills: ["React", "TypeScript", "Next.js"], status: "open", createdAt: new Date().toISOString(), applicantsCount: 42
-    },
-    {
-      id: 2, companyId: 102, companyName: "Stripe", title: "Backend Systems Intern", 
-      location: "San Francisco, CA", type: "Fall 2024", duration: "16 Weeks", salary: "$55/hr",
-      skills: ["Go", "Ruby", "PostgreSQL"], status: "open", createdAt: new Date().toISOString(), applicantsCount: 156
-    },
-    {
-      id: 3, companyId: 103, companyName: "Linear", title: "Product Engineering Intern", 
-      location: "Remote, Global", type: "Summer 2024", duration: "12 Weeks", salary: "$50/hr",
-      skills: ["React", "GraphQL", "MobX"], status: "open", createdAt: new Date().toISOString(), applicantsCount: 89
-    }
-  ];
-
-  const displayData = React.useMemo(() => {
-    if (Array.isArray(internships)) return internships;
-    if (Array.isArray((internships as any)?.data)) return (internships as any).data;
-    if (Array.isArray((internships as any)?.internships)) return (internships as any).internships;
-    return mockInternships;
-  }, [internships]);
-
-  // Basic filtering for demo
-  const filteredData = (Array.isArray(displayData) ? displayData : []).filter((i: any) =>
-    (i?.title || '').toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-    ((i?.companyName || '').toLowerCase().includes(debouncedSearch.toLowerCase()))
-  );
+  const filteredData = (internships ?? []).filter((internship) => {
+    const normalizedSearch = debouncedSearch.trim().toLocaleLowerCase();
+    return [
+      internship.title,
+      internship.companyName ?? '',
+      ...(internship.skills ?? []),
+    ].some((value) => value.toLocaleLowerCase().includes(normalizedSearch));
+  });
 
   return (
     <div className="bg-muted/20 min-h-[calc(100vh-64px)] pb-20">
@@ -137,6 +119,14 @@ export default function InternshipsPage() {
             <div className="flex items-center justify-center py-20">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
+          ) : isError ? (
+            <div className="space-y-4 rounded-xl border border-destructive/30 bg-card py-12 text-center">
+              <h3 className="text-lg font-semibold">Could not load internships</h3>
+              <p className="text-muted-foreground">
+                {error instanceof Error ? error.message : "Please try again."}
+              </p>
+              <Button variant="outline" onClick={() => void refetch()}>Try again</Button>
+            </div>
           ) : filteredData.length === 0 ? (
             <div className="text-center py-20 bg-white rounded-xl border border-dashed">
               <Briefcase className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-50" />
@@ -145,7 +135,7 @@ export default function InternshipsPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              {filteredData.map((internship: any) => (
+              {filteredData.map((internship) => (
                 <Card key={internship.id} className="hover:border-primary/50 transition-colors shadow-sm hover:shadow-md overflow-hidden group">
                   <CardContent className="p-6">
                     <div className="flex flex-col sm:flex-row gap-6">

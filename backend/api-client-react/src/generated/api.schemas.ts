@@ -6,7 +6,8 @@
  * OpenAPI spec version: 0.1.0
  */
 export interface HealthStatus {
-  status: string;
+  ok: boolean;
+  service: string;
 }
 
 export type RegisterInputRole = typeof RegisterInputRole[keyof typeof RegisterInputRole];
@@ -16,19 +17,33 @@ export const RegisterInputRole = {
   student: 'student',
   company: 'company',
   university: 'university',
-  admin: 'admin',
 } as const;
 
 export interface RegisterInput {
   email: string;
   password: string;
   name: string;
-  role: RegisterInputRole;
+  role?: RegisterInputRole;
 }
 
 export interface LoginInput {
   email: string;
   password: string;
+}
+
+export type SocialLoginInputRole = typeof SocialLoginInputRole[keyof typeof SocialLoginInputRole];
+
+
+export const SocialLoginInputRole = {
+  student: 'student',
+  company: 'company',
+  university: 'university',
+} as const;
+
+export interface SocialLoginInput {
+  /** @maxLength 8192 */
+  accessToken: string;
+  role?: SocialLoginInputRole;
 }
 
 export type UserRole = typeof UserRole[keyof typeof UserRole];
@@ -54,73 +69,6 @@ export interface User {
 export interface AuthResponse {
   token: string;
   user: User;
-}
-
-export interface StudentProfile {
-  id: number;
-  userId: number;
-  name: string;
-  email: string;
-  /** @nullable */
-  university?: string | null;
-  /** @nullable */
-  gpa?: number | null;
-  /** @nullable */
-  bio?: string | null;
-  /** @nullable */
-  resumeUrl?: string | null;
-  skills?: string[];
-  verified?: boolean;
-  /** @nullable */
-  avatarUrl?: string | null;
-}
-
-export interface StudentInput {
-  university?: string;
-  gpa?: number;
-  bio?: string;
-  resumeUrl?: string;
-  skills?: string[];
-  avatarUrl?: string;
-}
-
-export interface CompanyProfile {
-  id: number;
-  userId: number;
-  name: string;
-  email: string;
-  /** @nullable */
-  companyName?: string | null;
-  /** @nullable */
-  industry?: string | null;
-  /** @nullable */
-  description?: string | null;
-  /** @nullable */
-  website?: string | null;
-  /** @nullable */
-  logoUrl?: string | null;
-  verified?: boolean;
-}
-
-export interface CompanyInput {
-  companyName?: string;
-  industry?: string;
-  description?: string;
-  website?: string;
-  logoUrl?: string;
-}
-
-export interface UniversityProfile {
-  id: number;
-  userId: number;
-  name: string;
-  email: string;
-  /** @nullable */
-  universityName?: string | null;
-  /** @nullable */
-  country?: string | null;
-  /** @nullable */
-  website?: string | null;
 }
 
 export type InternshipStatus = typeof InternshipStatus[keyof typeof InternshipStatus];
@@ -223,6 +171,15 @@ export const InternshipWithMatchStatus = {
   draft: 'draft',
 } as const;
 
+export type InternshipWithMatchWeights = {
+  assessment?: number;
+  skills?: number;
+  projectsExperience?: number;
+  education?: number;
+};
+
+export type InternshipWithMatchBreakdown = { [key: string]: unknown };
+
 export interface InternshipWithMatch {
   id: number;
   companyId: number;
@@ -245,15 +202,24 @@ export interface InternshipWithMatch {
   deadline?: string | null;
   applicantsCount?: number;
   createdAt: string;
-  matchScore: number;
+  /** @nullable */
+  matchScore: number | null;
   matchExplanation?: string;
+  eligible?: boolean;
+  eligibilityReasons?: string[];
+  evidenceCoverage?: number;
+  weights?: InternshipWithMatchWeights;
+  breakdown?: InternshipWithMatchBreakdown;
 }
 
 export interface MatchResult {
-  matchScore: number;
+  /** @nullable */
+  matchScore: number | null;
   matchExplanation: string;
   matchedSkills: string[];
   missingSkills: string[];
+  eligible: boolean;
+  eligibilityReasons: string[];
 }
 
 export type ApplicationStatus = typeof ApplicationStatus[keyof typeof ApplicationStatus];
@@ -292,10 +258,16 @@ export const ApplicationWithStudentStatus = {
   withdrawn: 'withdrawn',
 } as const;
 
+export type ApplicationWithStudentAssessmentScoresItem = {
+  skill: string;
+  score: number;
+};
+
 export interface ApplicationWithStudent {
   id: number;
   studentId: number;
   internshipId: number;
+  internshipTitle?: string;
   studentName?: string;
   studentEmail?: string;
   /** @nullable */
@@ -309,9 +281,11 @@ export interface ApplicationWithStudent {
   matchScore?: number | null;
   status: ApplicationWithStudentStatus;
   createdAt: string;
+  assessmentScores?: ApplicationWithStudentAssessmentScoresItem[];
 }
 
 export interface ApplicationInput {
+  /** Authenticated users.id (validated against the session; students.id is derived server-side). */
   studentId: number;
   internshipId: number;
   coverLetter?: string;
@@ -321,25 +295,12 @@ export type ApplicationStatusInputStatus = typeof ApplicationStatusInputStatus[k
 
 
 export const ApplicationStatusInputStatus = {
-  pending: 'pending',
   accepted: 'accepted',
   rejected: 'rejected',
-  withdrawn: 'withdrawn',
 } as const;
 
 export interface ApplicationStatusInput {
   status: ApplicationStatusInputStatus;
-}
-
-export interface Notification {
-  id: number;
-  userId: number;
-  title: string;
-  message: string;
-  read: boolean;
-  /** @nullable */
-  type?: string | null;
-  createdAt: string;
 }
 
 export type VerificationRequestStatus = typeof VerificationRequestStatus[keyof typeof VerificationRequestStatus];
@@ -361,11 +322,6 @@ export interface VerificationRequest {
   createdAt: string;
 }
 
-export interface VerificationInput {
-  studentId: number;
-  universityId: number;
-}
-
 export type VerificationStatusInputStatus = typeof VerificationStatusInputStatus[keyof typeof VerificationStatusInputStatus];
 
 
@@ -376,6 +332,359 @@ export const VerificationStatusInputStatus = {
 
 export interface VerificationStatusInput {
   status: VerificationStatusInputStatus;
+}
+
+export type StudentEvidenceInputProjectsItem = {
+  name: string;
+  description?: string;
+  skills?: string[];
+  /**
+     * @maxLength 2048
+     * @pattern ^https?://
+     */
+  url?: string;
+  /** @nullable */
+  startedAt?: string | null;
+  /** @nullable */
+  completedAt?: string | null;
+};
+
+export type StudentEvidenceInputExperienceItem = {
+  organization: string;
+  title: string;
+  description?: string;
+  skills?: string[];
+  /** @nullable */
+  startedAt?: string | null;
+  /** @nullable */
+  endedAt?: string | null;
+};
+
+export type StudentEvidenceInputEducationItem = {
+  institution: string;
+  degree?: string;
+  fieldOfStudy?: string;
+  coursework?: string[];
+  /** @nullable */
+  startDate?: string | null;
+  /** @nullable */
+  endDate?: string | null;
+};
+
+export interface StudentEvidenceInput {
+  projects: StudentEvidenceInputProjectsItem[];
+  experience: StudentEvidenceInputExperienceItem[];
+  education: StudentEvidenceInputEducationItem[];
+}
+
+export interface StudentProject {
+  id: number;
+  name: string;
+  description: string;
+  skills: string[];
+  /** @nullable */
+  url: string | null;
+  /** @nullable */
+  startedAt: string | null;
+  /** @nullable */
+  completedAt: string | null;
+}
+
+export interface StudentExperience {
+  id: number;
+  organization: string;
+  title: string;
+  description: string;
+  skills: string[];
+  /** @nullable */
+  startedAt: string | null;
+  /** @nullable */
+  endedAt: string | null;
+}
+
+export interface StudentEducation {
+  id: number;
+  institution: string;
+  /** @nullable */
+  degree: string | null;
+  /** @nullable */
+  fieldOfStudy: string | null;
+  coursework: string[];
+  /** @nullable */
+  startDate: string | null;
+  /** @nullable */
+  endDate: string | null;
+}
+
+export interface StudentTalentProfile {
+  /** @nullable */
+  university: string | null;
+  /** @nullable */
+  gpa: number | null;
+  /** @nullable */
+  bio: string | null;
+  /** @nullable */
+  resumeUrl: string | null;
+  verified: boolean;
+  skills: string[];
+  projects: StudentProject[];
+  experience: StudentExperience[];
+  education: StudentEducation[];
+}
+
+export interface StudentTalentProfileInput {
+  /** @nullable */
+  university?: string | null;
+  /**
+     * @minimum 0
+     * @maximum 5
+     * @nullable
+     */
+  gpa?: number | null;
+  /**
+     * @maxLength 500
+     * @nullable
+     */
+  bio?: string | null;
+  /**
+     * @maxLength 2048
+     * @nullable
+     * @pattern ^https?://
+     */
+  resumeUrl?: string | null;
+  /** @maxItems 100 */
+  skills: string[];
+}
+
+export type InternshipTalentRequirementsInputSkillWeights = {[key: string]: number};
+
+export interface MatchWeights {
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  assessment: number;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  skills: number;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  projectsExperience: number;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  education: number;
+}
+
+export interface InternshipTalentRequirementsInput {
+  /** @nullable */
+  roleId?: number | null;
+  requiredCoursework?: string[];
+  requiredFieldsOfStudy?: string[];
+  matchWeights?: MatchWeights;
+  skillWeights?: InternshipTalentRequirementsInputSkillWeights;
+  /**
+     * @minimum 0
+     * @maximum 100
+     * @nullable
+     */
+  minimumMatchScore?: number | null;
+  /**
+     * @minimum 0
+     * @maximum 100
+     * @nullable
+     */
+  minimumAssessmentScore?: number | null;
+  requireVerifiedStudent?: boolean;
+}
+
+export type AssessmentSummaryDifficulty = typeof AssessmentSummaryDifficulty[keyof typeof AssessmentSummaryDifficulty];
+
+
+export const AssessmentSummaryDifficulty = {
+  beginner: 'beginner',
+  intermediate: 'intermediate',
+  advanced: 'advanced',
+} as const;
+
+export interface AssessmentSummary {
+  id: number;
+  templateId: number;
+  version: number;
+  title: string;
+  skill: string;
+  difficulty: AssessmentSummaryDifficulty;
+  durationMinutes: number;
+  questionCount: number;
+}
+
+export type AssessmentInputDifficulty = typeof AssessmentInputDifficulty[keyof typeof AssessmentInputDifficulty];
+
+
+export const AssessmentInputDifficulty = {
+  beginner: 'beginner',
+  intermediate: 'intermediate',
+  advanced: 'advanced',
+} as const;
+
+export type AssessmentQuestionInputType = typeof AssessmentQuestionInputType[keyof typeof AssessmentQuestionInputType];
+
+
+export const AssessmentQuestionInputType = {
+  single_choice: 'single_choice',
+  multi_select: 'multi_select',
+  scenario: 'scenario',
+  code_reading: 'code_reading',
+  short_answer: 'short_answer',
+} as const;
+
+export type AssessmentQuestionInputOptionsItem = {
+  id: string;
+  label: string;
+};
+
+export type AssessmentQuestionInputAnswerKey = string | string[] | { [key: string]: unknown };
+
+export type AssessmentQuestionInputRubricItem = {
+  /** @maxLength 500 */
+  criterion: string;
+  /** @exclusiveMinimum 0 */
+  maxPoints: number;
+};
+
+export interface AssessmentQuestionInput {
+  type: AssessmentQuestionInputType;
+  /** @maxLength 2000 */
+  prompt: string;
+  /**
+     * @minItems 2
+     * @maxItems 10
+     */
+  options?: AssessmentQuestionInputOptionsItem[];
+  answerKey?: AssessmentQuestionInputAnswerKey;
+  /** @maxItems 20 */
+  rubric?: AssessmentQuestionInputRubricItem[];
+  /**
+     * @minimum 0.01
+     * @maximum 1000
+     */
+  maxPoints?: number;
+  /** @maxLength 2000 */
+  explanation?: string;
+}
+
+export interface AssessmentInput {
+  skillId: number;
+  /** @nullable */
+  roleId?: number | null;
+  /** @maxLength 200 */
+  title?: string;
+  difficulty: AssessmentInputDifficulty;
+  /**
+     * @minimum 1
+     * @maximum 240
+     */
+  durationMinutes?: number;
+  /**
+     * @minItems 1
+     * @maxItems 50
+     */
+  questions: AssessmentQuestionInput[];
+}
+
+export type AssessmentRubricGradeCriteriaItem = {
+  criterion: string;
+  /** @minimum 0 */
+  points: number;
+};
+
+export interface AssessmentRubricGrade {
+  /**
+     * @minItems 1
+     * @maxItems 20
+     */
+  criteria: AssessmentRubricGradeCriteriaItem[];
+  /** @maxLength 2000 */
+  notes?: string;
+}
+
+export type AssessmentHistoryItemStatus = typeof AssessmentHistoryItemStatus[keyof typeof AssessmentHistoryItemStatus];
+
+
+export const AssessmentHistoryItemStatus = {
+  in_progress: 'in_progress',
+  pending_review: 'pending_review',
+  submitted: 'submitted',
+  expired: 'expired',
+} as const;
+
+export type AssessmentHistoryItemSkillScoresItem = {
+  skill?: string;
+  score?: number;
+};
+
+export interface AssessmentHistoryItem {
+  id: number;
+  title: string;
+  status: AssessmentHistoryItemStatus;
+  startedAt: string;
+  /** @nullable */
+  submittedAt?: string | null;
+  /** @nullable */
+  overallScore?: number | null;
+  skillScores: AssessmentHistoryItemSkillScoresItem[];
+}
+
+export type AssessmentAttemptStatus = typeof AssessmentAttemptStatus[keyof typeof AssessmentAttemptStatus];
+
+
+export const AssessmentAttemptStatus = {
+  in_progress: 'in_progress',
+  pending_review: 'pending_review',
+  submitted: 'submitted',
+  expired: 'expired',
+} as const;
+
+export type AssessmentAttemptQuestionsItemOptionsItem = { [key: string]: unknown };
+
+export type AssessmentAttemptQuestionsItemRubricItem = {
+  criterion?: string;
+  maxPoints?: number;
+};
+
+export type AssessmentAttemptQuestionsItem = {
+  id: number;
+  position: number;
+  skillId: number;
+  type: string;
+  difficulty: string;
+  prompt: string;
+  options: AssessmentAttemptQuestionsItemOptionsItem[] | null;
+  answer: string | string[] | null;
+  /** @nullable */
+  earnedPoints?: number | null;
+  /** @nullable */
+  explanation?: string | null;
+  rubric?: AssessmentAttemptQuestionsItemRubricItem[];
+};
+
+export interface AssessmentAttempt {
+  id: number;
+  status: AssessmentAttemptStatus;
+  startedAt: string;
+  expiresAt: string;
+  /** @nullable */
+  submittedAt?: string | null;
+  /** @nullable */
+  overallScore?: number | null;
+  /** @nullable */
+  resultExplanation?: string | null;
+  questions: AssessmentAttemptQuestionsItem[];
 }
 
 export interface StudentDashboard {
@@ -405,6 +714,59 @@ export interface UniversityDashboard {
   recentVerifications?: VerificationRequest[];
 }
 
+export type ReplaceTalentEvidence200 = {
+  saved?: boolean;
+};
+
+export type GetTalentTaxonomy200 = { [key: string]: unknown };
+
+export type GrantUniversityAnalyticsConsentBody = {
+  universityId: number;
+};
+
+export type GrantUniversityAnalyticsConsent200 = { [key: string]: unknown };
+
+export type RevokeUniversityAnalyticsConsent200 = { [key: string]: unknown };
+
+export type GrantCompanyAssessmentConsentBody = {
+  applicationId: number;
+};
+
+export type GrantCompanyAssessmentConsent200 = { [key: string]: unknown };
+
+export type RevokeCompanyAssessmentConsent200 = { [key: string]: unknown };
+
+export type GetUniversityTalentAnalytics200 = { [key: string]: unknown };
+
+export type CreateAssessment201 = { [key: string]: unknown };
+
+export type GetAssessmentForReview200 = { [key: string]: unknown };
+
+export type GradeSubjectiveAssessmentAnswer200 = { [key: string]: unknown };
+
+export type ListAssessmentsPendingReview200ItemQuestionsItem = { [key: string]: unknown };
+
+export type ListAssessmentsPendingReview200Item = {
+  attemptId?: number;
+  studentId?: number;
+  assessmentTitle?: string;
+  /** @nullable */
+  submittedAt?: string | null;
+  questions?: ListAssessmentsPendingReview200ItemQuestionsItem[];
+};
+
+export type EditAssessmentQuestion200 = { [key: string]: unknown };
+
+export type ReviewAssessmentQuestion200 = { [key: string]: unknown };
+
+export type PublishReviewedAssessment200 = { [key: string]: unknown };
+
+export type SaveAssessmentAnswerBody = {
+  answer: unknown;
+};
+
+export type SaveAssessmentAnswer200 = { [key: string]: unknown };
+
 export type ListInternshipsParams = {
 search?: string;
 location?: string;
@@ -413,11 +775,10 @@ skill?: string;
 };
 
 export type GetMatchScoreParams = {
+/**
+ * Authenticated users.id for the student; the server verifies it against the bearer session.
+ */
 studentId: number;
-};
-
-export type ListNotificationsParams = {
-userId: number;
 };
 
 export type ListVerificationRequestsParams = {

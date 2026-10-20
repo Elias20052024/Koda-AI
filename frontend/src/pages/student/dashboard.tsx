@@ -12,27 +12,12 @@ export default function StudentDashboard() {
   const { auth } = useAuth();
   const studentId = auth?.user?.id || 0;
 
-  const { data: dashboard, isLoading } = useGetStudentDashboard(
+  const { data: dashboard, isLoading, isError, error, refetch } = useGetStudentDashboard(
     { studentId },
     { query: { enabled: !!studentId, queryKey: ['student-dashboard', studentId] } }
   );
 
-  // Mock data
-  const mockDashboard = {
-    totalApplications: 12,
-    pendingApplications: 5,
-    acceptedApplications: 2,
-    rejectedApplications: 5,
-    profileCompleteness: 85,
-    recommendedCount: 24,
-    recentApplications: [
-      { id: 1, internshipTitle: "Frontend Intern", companyName: "Vercel", status: "pending", createdAt: new Date().toISOString(), matchScore: 92 },
-      { id: 2, internshipTitle: "React Developer", companyName: "Linear", status: "accepted", createdAt: new Date(Date.now() - 86400000 * 5).toISOString(), matchScore: 88 },
-      { id: 3, internshipTitle: "UI Engineer", companyName: "Stripe", status: "rejected", createdAt: new Date(Date.now() - 86400000 * 12).toISOString(), matchScore: 75 },
-    ]
-  };
-
-  if (isLoading && !dashboard) {
+  if (isLoading) {
     return (
       <div className="flex justify-center p-12">
         <Loader2 className="animate-spin text-primary h-8 w-8" />
@@ -40,7 +25,18 @@ export default function StudentDashboard() {
     );
   }
 
-  const data = dashboard || mockDashboard;
+  if (isError || !dashboard) {
+    return (
+      <div className="space-y-4 p-8 text-center">
+        <h1 className="text-2xl font-semibold">Could not load the student dashboard</h1>
+        <p className="text-muted-foreground">
+          {error instanceof Error ? error.message : "Dashboard data is unavailable."}
+        </p>
+        <Button variant="outline" onClick={() => void refetch()}>Try again</Button>
+      </div>
+    );
+  }
+  const data = dashboard;
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -117,13 +113,13 @@ export default function StudentDashboard() {
           <Card className="border border-border bg-slate-950 text-white shadow-lg">
             <CardHeader className="flex items-start justify-between gap-4 pb-2">
               <div>
-                <CardTitle className="text-sm font-semibold text-slate-300">AI Recommended Roles</CardTitle>
+                <CardTitle className="text-sm font-semibold text-slate-300">Open Internships</CardTitle>
                 <p className="mt-2 text-3xl font-semibold text-white">{data.recommendedCount}</p>
               </div>
               <Zap className="h-5 w-5 text-cyan-300" />
             </CardHeader>
             <CardContent className="pt-0">
-              <p className="text-sm text-slate-300">Personalized matches based on your profile and skills.</p>
+              <p className="text-sm text-slate-300">Open internship listings you have not applied to.</p>
             </CardContent>
           </Card>
 
@@ -162,7 +158,7 @@ export default function StudentDashboard() {
             </CardHeader>
           </div>
           <CardContent className="space-y-4 px-6 pt-6 pb-6">
-            {data.recentApplications?.map((app: any) => (
+            {data.recentApplications?.map((app) => (
               <div key={app.id} className="flex flex-col gap-3 rounded-3xl border border-border bg-card p-4 transition-all hover:scale-[1.01] hover:border-muted">
                 <div className="flex items-start justify-between gap-4">
                   <div>
@@ -170,8 +166,10 @@ export default function StudentDashboard() {
                     <p className="text-sm text-muted-foreground">{app.companyName} · {format(new Date(app.createdAt), 'MMM d')}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-medium text-foreground">{app.matchScore}% Match</p>
-                    <p className="text-xs text-muted-foreground">Strength score</p>
+                    <p className="text-sm font-medium text-foreground">
+                      {app.matchScore == null ? "—" : `${app.matchScore}% Match`}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Match score</p>
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">

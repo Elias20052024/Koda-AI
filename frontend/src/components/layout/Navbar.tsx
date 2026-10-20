@@ -26,7 +26,6 @@ export default function Navbar() {
 
   const navLinks = [
     { label: 'Internships', href: '/internships' },
-    { label: 'AI Assistant', href: '/ai' },
     { label: 'About', href: '/about' },
   ];
 

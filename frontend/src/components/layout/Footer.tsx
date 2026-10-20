@@ -21,7 +21,7 @@ export default function Footer() {
               <span className="text-xl font-bold tracking-tight bg-gradient-to-r from-[#33D6D1] to-[#35B7FF] bg-clip-text text-transparent">Koda AI</span>
             </Link>
             <p className="text-sm text-muted-foreground max-w-sm leading-relaxed">
-              Intelligent internship matching powered by AI. Connecting top IT talent with forward-thinking companies through skill-based discovery.
+              Connecting IT students and companies through transparent, configurable skill-based internship matching.
             </p>
             <div className="flex space-x-4 pt-2">
               <a href="#" className="p-2 rounded-lg bg-muted/50 text-muted-foreground hover:bg-muted hover:text-[#33D6D1] transition-all group">
