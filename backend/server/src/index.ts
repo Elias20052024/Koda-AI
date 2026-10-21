@@ -737,8 +737,8 @@ async function start() {
     return toUserResponse(user);
   });
 
-  const host = process.env.HOST ?? '127.0.0.1';
-  const port = Number(process.env.SERVER_PORT ?? 4174);
+  const host = process.env.HOST ?? '0.0.0.0';
+  const port = Number(process.env.PORT ?? process.env.SERVER_PORT ?? 4174);
   await app.listen({ host, port });
   console.log(`Server listening on http://${host}:${port}`);
 }
