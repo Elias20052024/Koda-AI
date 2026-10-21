@@ -8,7 +8,7 @@
     "test": "tsx --test src/auth.test.ts src/talent/assessment-scoring.test.ts src/talent/matching.test.ts src/talent/assessment-questions.test.ts src/talent/privacy.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "build": "tsc -p tsconfig.json",
-    "start": "node --experimental-specifier-resolution=node dist/index.js"
+    "start": "tsx src/index.ts"
   },
   "dependencies": {
     "@fastify/cors": "^8.0.0",
