@@ -2,10 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
 import { useAuth } from '@/hooks/use-auth';
 import { getSupabaseClient } from '@/lib/supabase';
+import { apiBaseUrl } from '@/lib/api-base-url';
 import { Loader2, Code2, AlertCircle } from 'lucide-react';
 import { Link } from 'wouter';
-
-const API_BASE = `${import.meta.env.BASE_URL?.replace(/\/$/, '') ?? ''}/api`;
 
 /**
  * Supabase redirects here after the user completes OAuth with a provider.
@@ -50,7 +49,7 @@ export default function OAuthCallbackPage() {
 
       try {
         // The backend verifies this access token with Supabase before accepting identity claims.
-        const res = await fetch(`${API_BASE}/auth/social`, {
+        const res = await fetch(`${apiBaseUrl}/auth/social`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ accessToken: session.access_token, role: normalizedRole }),

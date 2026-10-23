@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { setBaseUrl, setAuthTokenGetter } from '@workspace/api-client-react';
+import { apiOrigin } from '@/lib/api-base-url';
 import { useTheme } from '@/hooks/use-theme';
 
 // Layouts
@@ -130,7 +131,7 @@ function App() {
   useTheme();
 
   useEffect(() => {
-    setBaseUrl(import.meta.env.BASE_URL?.replace(/\/$/, '') || null);
+    setBaseUrl(apiOrigin || null);
     setAuthTokenGetter(() => {
       if (typeof window === 'undefined') return null;
       const raw = window.localStorage.getItem('koda_auth');
